@@ -127,7 +127,17 @@ enum DirWalker {
 
 enum FileSizer {
     /// Never descend into these while sizing (other volumes, firmlink mirrors, device files).
-    static let skipPaths: Set<String> = ["/System/Volumes", "/Volumes", "/dev", "/net", "/home"]
+    /// `/.nofollow`, `/.resolve` and `/.vol` are virtual doorways back into the *same* disk —
+    /// measuring them counts everything twice (a 245 GB disk showed up as 450 GB).
+    static let skipPaths: Set<String> = ["/System/Volumes", "/Volumes", "/dev", "/net", "/home",
+                                         "/.nofollow", "/.resolve", "/.vol"]
+
+    /// Foundation reports some virtual folders with a trailing slash (`/.nofollow/`), so normalize first.
+    static func isSkipped(_ path: String) -> Bool {
+        var p = path
+        while p.count > 1 && p.hasSuffix("/") { p.removeLast() }
+        return skipPaths.contains(p)
+    }
 
     private static let keys: [URLResourceKey] = [
         .isRegularFileKey, .isSymbolicLinkKey, .totalFileAllocatedSizeKey, .fileAllocatedSizeKey,
@@ -139,12 +149,12 @@ enum FileSizer {
         guard let v = try? url.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey, .totalFileAllocatedSizeKey, .fileAllocatedSizeKey]) else { return 0 }
         if v.isSymbolicLink == true { return 0 }
         if v.isDirectory != true { return Int64(v.totalFileAllocatedSize ?? v.fileAllocatedSize ?? 0) }
-        if skipPaths.contains(url.path) { return 0 }
+        if isSkipped(url.path) { return 0 }
 
         var total: Int64 = 0
         var seenLinks = Set<NSObject>()
         DirWalker.walk(url, keys: keys) { item, _, rv in
-            if rv.isDirectory == true { return skipPaths.contains(item.path) ? .skip : .descend }
+            if rv.isDirectory == true { return isSkipped(item.path) ? .skip : .descend }
             if rv.isRegularFile == true {
                 // Hard links share data: count it once (like `du`).
                 if (rv.linkCount ?? 1) > 1, let id = rv.fileResourceIdentifier as? NSObject,

@@ -48,7 +48,7 @@ final class SizeIndex: @unchecked Sendable {
 
     private func measureDir(_ dir: URL, depth: Int) -> Int64 {
         if Task.isCancelled { return 0 }
-        if FileSizer.skipPaths.contains(dir.path) { return 0 }
+        if FileSizer.isSkipped(dir.path) { return 0 }
         if let s = cached(dir.path) { return s }
         guard let children = try? FileManager.default.contentsOfDirectory(
             at: dir, includingPropertiesForKeys: Self.keys, options: []) else { return 0 }
@@ -200,7 +200,8 @@ final class ExplorerModel: ObservableObject {
     }
 
     private func loadChildren(_ n: ExplorerNode) {
-        var urls = Paths.children(of: n.url)
+        // Virtual mirrors and other volumes aren't storage on this disk — don't list them.
+        var urls = Paths.children(of: n.url).filter { !FileSizer.isSkipped($0.path) }
         if !showHidden { urls = urls.filter { !$0.lastPathComponent.hasPrefix(".") } }
         n.children = urls.map { makeNode($0, parent: n) }
         sortChildren(n)
@@ -352,8 +353,10 @@ final class ExplorerModel: ObservableObject {
                 if let i = categories.firstIndex(where: { $0.id == spec.id }) { categories[i].size = size }
             }
             let known = categories.reduce(Int64(0)) { $0 + ($1.size ?? 0) }
+            // Re-read the disk now: free space changes while we measure.
+            let usedNow = DiskInfo.current().used
             categories.append(StorageCategory(id: "system", title: "macOS & System Data", icon: "gearshape.2", color: .gray,
-                                              paths: ["/"], size: max(0, diskUsed - known)))
+                                              paths: ["/"], size: max(0, usedNow - known)))
             categoriesLoading = false
             rebuild()
         }

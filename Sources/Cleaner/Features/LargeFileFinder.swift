@@ -87,7 +87,7 @@ enum LargeFileSearch {
             n += 1
             if n % 4000 == 0 { progress(n) }
             let p = url.path
-            if (!includeLibrary && p == library) || p == trash || FileSizer.skipPaths.contains(p)
+            if (!includeLibrary && p == library) || p == trash || FileSizer.isSkipped(p)
                 || SafetyGuard.isExcluded(url, list: excluded) || v.isSymbolicLink == true {
                 return .skip
             }

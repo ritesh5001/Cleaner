@@ -45,6 +45,12 @@ struct ExplorerView: View {
         return "\(r.url.path == "/" ? "Macintosh HD" : r.url.displayPath) · \(r.size.map(Fmt.bytes) ?? "measuring…") · click ▸ to expand, double-click to focus"
     }
 
+    /// Why a "256 GB" Mac shows ~245 GB.
+    private var capacityNote: String {
+        let marketed = [128, 256, 512, 1000, 2000, 4000, 8000].first { Double($0) * 1e9 >= Double(state.disk.total) } ?? 0
+        return "Your Mac is sold as \(marketed >= 1000 ? "\(marketed / 1000) TB" : "\(marketed) GB"). macOS keeps a few GB for the Recovery system and firmware, and flash storage reserves some space for wear-levelling, so \(Fmt.bytes(state.disk.total)) is usable. Sizes here count 1 GB = 1,000,000,000 bytes, like Finder."
+    }
+
     private var trashTitle: String {
         pendingTrash.count == 1 ? "Move “\(pendingTrash[0].lastPathComponent)” to the Trash?" : "Move \(pendingTrash.count) items to the Trash?"
     }
@@ -88,8 +94,17 @@ struct ExplorerView: View {
                     .buttonStyle(.plain)
                 }
             }
+            if let r = model.root, r.url.path == "/", let measured = r.size, !(r.isLoading), state.disk.used > measured {
+                Label("Cleaner can see \(Fmt.bytes(measured)) of the \(Fmt.bytes(state.disk.used)) in use. The other \(Fmt.bytes(state.disk.used - measured)) is in places macOS hides\(state.hasFullDiskAccess ? "" : " (grant Full Disk Access to see more)"): the Trash, swap, local snapshots, the Preboot/VM volumes and other users' files. Items you moved to the Trash still use space until you empty it.",
+                      systemImage: "eye.slash")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             HStack {
-                Text("\(Fmt.bytes(state.disk.free)) free").font(.caption).foregroundStyle(.secondary)
+                Text("\(Fmt.bytes(state.disk.used)) used · \(Fmt.bytes(state.disk.free)) free of \(Fmt.bytes(state.disk.total))")
+                    .font(.caption).foregroundStyle(.secondary)
+                Image(systemName: "info.circle").font(.caption).foregroundStyle(.secondary)
+                    .help(capacityNote)
                 Spacer()
                 Button {
                     query = AIQuery(title: "How should I free up space?", prompt: overviewPrompt)
