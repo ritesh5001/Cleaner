@@ -106,7 +106,7 @@ struct UninstallerView: View {
                         Button("Quit \(app.name)") { model.quit(app) }
                     }
                     Button("Uninstall") { confirm = true }
-                        .buttonStyle(.borderedProminent)
+                        .glassButton(prominent: true)
                         .tint(.red)
                         .disabled(model.isFindingLeftovers)
                 }

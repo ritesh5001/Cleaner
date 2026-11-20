@@ -13,7 +13,7 @@ struct DuplicatesView: View {
                     Button("Stop") { finder.stop() }
                 } else {
                     Button { finder.scan() } label: { Label("Scan", systemImage: "magnifyingglass") }
-                        .buttonStyle(.borderedProminent)
+                        .glassButton(prominent: true)
                         .disabled(finder.roots.isEmpty)
                 }
             }
@@ -124,7 +124,7 @@ struct DuplicatesView: View {
                 Spacer()
                 Button("Auto-select (keep one)") { finder.autoSelect() }.disabled(finder.groups.isEmpty)
                 Button("Move to Trash") { confirm = true }
-                    .buttonStyle(.borderedProminent)
+                    .glassButton(prominent: true)
                     .disabled(finder.selected.isEmpty)
             }
         }

@@ -21,7 +21,7 @@ struct LargeFilesView: View {
                         } label: { Label("AI Review", systemImage: "sparkles") }
                     }
                     Button { finder.scan() } label: { Label("Scan", systemImage: "magnifyingglass") }
-                        .buttonStyle(.borderedProminent)
+                        .glassButton(prominent: true)
                 }
             }
             .padding(20)
@@ -133,7 +133,7 @@ struct LargeFilesView: View {
                 Text("\(finder.selected.count) selected · \(Fmt.bytes(finder.selectedSize))").foregroundStyle(.secondary)
                 Spacer()
                 Button("Move to Trash") { confirmTrash = true }
-                    .buttonStyle(.borderedProminent)
+                    .glassButton(prominent: true)
                     .disabled(finder.selected.isEmpty)
             }
         }

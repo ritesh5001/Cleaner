@@ -51,6 +51,12 @@ enum Paths {
     /// Path with the home folder replaced by `~` (also hides the username from AI prompts).
     static func display(_ url: URL) -> String {
         let p = url.path, h = home.path
+        for root in [darwinCacheDir, "/private" + darwinCacheDir] where !darwinCacheDir.isEmpty && p.hasPrefix(root + "/") {
+            return "macOS cache › " + String(p.dropFirst(root.count + 1))
+        }
+        for root in [darwinTempDir, "/private" + darwinTempDir] where !darwinTempDir.isEmpty && p.hasPrefix(root + "/") {
+            return "macOS temp › " + String(p.dropFirst(root.count + 1))
+        }
         if p == h { return "~" }
         if p.hasPrefix(h + "/") { return "~" + String(p.dropFirst(h.count)) }
         return p

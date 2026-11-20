@@ -38,7 +38,7 @@ struct OrganizerView: View {
                 ForEach(["Downloads", "Desktop", "Documents"], id: \.self) { name in
                     let url = Paths.home.appendingPathComponent(name)
                     Button(name) { model.source = url }
-                        .buttonStyle(.bordered)
+                        .glassButton()
                         .tint(model.source == url ? .accentColor : .secondary)
                 }
                 Button("Choose…") { choose() }
@@ -57,7 +57,7 @@ struct OrganizerView: View {
                 } label: {
                     Label(model.mode == .ai ? "Ask AI for a Plan" : "Preview", systemImage: model.mode == .ai ? "sparkles" : "eye")
                 }
-                .buttonStyle(.borderedProminent)
+                .glassButton(prominent: true)
                 .disabled(model.isPlanning || model.isApplying || (model.mode == .ai && !ai.isReady))
                 if model.isPlanning { ProgressView().controlSize(.small) }
                 Spacer()
@@ -128,7 +128,7 @@ struct OrganizerView: View {
             Spacer()
             if model.isApplying { ProgressView().controlSize(.small) }
             Button("Organize Now") { model.apply() }
-                .buttonStyle(.borderedProminent)
+                .glassButton(prominent: true)
                 .disabled(model.activeMoves.isEmpty || model.isApplying)
         }
     }

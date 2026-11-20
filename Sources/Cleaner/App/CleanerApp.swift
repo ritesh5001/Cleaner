@@ -8,6 +8,28 @@ enum Entry {
         if args.contains("--scan") { CLI.dryRunScan(); exit(0) }
         if args.contains("--dupes") { CLI.dupes(); exit(0) }
         if args.contains("--health") { CLI.health(); exit(0) }
+        if args.contains("--apps") { CLI.apps(); exit(0) }
+        if args.contains("--identify") {
+            // Live test of "Identify with AI" on cache/tool folders Cleaner couldn't attribute.
+            Task { @MainActor in
+                let r = AppOwnerResolver.shared
+                r.reload()
+                let candidates = Paths.children(of: Paths.expand("~/Library/Caches"))
+                    + Paths.children(of: Paths.home).filter { $0.lastPathComponent.hasPrefix(".") && Paths.isDirectory($0) }
+                let unknown = candidates.filter { let o = r.owner(for: $0); return o == nil || o?.source == .name }
+                print("Asking \(AISettings.shared.activeProvider.shortName) about \(unknown.count) unidentified items…")
+                do {
+                    let n = try await r.identifyWithAI(unknown.map { ($0, nil) })
+                    print("AI identified \(n):")
+                    for u in unknown {
+                        let o = r.owner(for: u)
+                        print("  \(u.lastPathComponent.padding(toLength: 26, withPad: " ", startingAt: 0)) → \(o?.name ?? "?")\(o?.note.map { " — \($0)" } ?? "")")
+                    }
+                } catch { print("ERROR:", error.localizedDescription) }
+                exit(0)
+            }
+            dispatchMain()
+        }
         if let i = args.firstIndex(of: "--organize-selftest"), i + 1 < args.count {
             CLI.organizerSelfTest(URL(fileURLWithPath: args[i + 1])); exit(0)
         }
@@ -64,6 +86,33 @@ enum CLI {
             if r.heldTotal > 0 { print("    + \(Fmt.bytes(r.heldTotal)) held by running apps: \(r.holdingApps.joined(separator: ", "))") }
         }
         print("\nTotal found: \(Fmt.bytes(total)) in \(String(format: "%.1f", Date().timeIntervalSince(start)))s")
+    }
+
+    /// `Cleaner --apps`: who owns each cache folder, and the biggest apps by total footprint (read-only).
+    static func apps() {
+        let r = AppOwnerResolver.shared
+        r.reload()
+        print("Owners of ~/Library/Caches folders:")
+        for u in Paths.children(of: Paths.expand("~/Library/Caches")).prefix(40) {
+            let o = r.owner(for: u)
+            print("  \(u.lastPathComponent.padding(toLength: 44, withPad: " ", startingAt: 0)) → \(o.map { "\($0.name) [\($0.source.rawValue)]" } ?? "?")")
+        }
+        let start = Date()
+        var groups = AppStorageModel.collect().0
+        for i in groups.indices {
+            groups[i].appSize = groups[i].appBundle.map { SizeIndex.shared.measure($0) }
+            for j in groups[i].items.indices {
+                let u = groups[i].items[j].url
+                groups[i].items[j].size = Paths.isDirectory(u) ? SizeIndex.shared.measure(u) : FileSizer.size(of: u)
+            }
+        }
+        groups.sort { $0.total > $1.total }
+        let unknown = groups.filter { $0.kind == .unknown }
+        print("\nTop apps & tools by total storage (\(String(format: "%.0f", Date().timeIntervalSince(start)))s):")
+        for g in groups.prefix(20) {
+            print("  \(Fmt.bytes(g.total).padding(toLength: 10, withPad: " ", startingAt: 0)) \(g.owner.name.padding(toLength: 34, withPad: " ", startingAt: 0)) app \(Fmt.bytes(g.appSize ?? 0)), data \(Fmt.bytes(g.dataSize)) in \(g.items.count) places [\(g.kind.rawValue)]")
+        }
+        print("\nUnidentified: \(unknown.count) items, \(Fmt.bytes(unknown.reduce(0) { $0 + $1.total })) — e.g. \(unknown.sorted { $0.total > $1.total }.prefix(6).map { "\($0.owner.name) \(Fmt.bytes($0.total))" }.joined(separator: ", "))")
     }
 
     /// `Cleaner --organize-preview <dir>`: read-only "by type" plan.

@@ -14,12 +14,13 @@ struct PageHeader<Trailing: View>: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title).font(.title2.bold())
-                Text(subtitle).font(.callout).foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title).font(.system(size: 26, weight: .bold))
+                Text(subtitle).font(.callout).foregroundStyle(.secondary).lineLimit(2)
             }
             Spacer()
-            trailing
+            GlassGroup { HStack(spacing: 8) { trailing } }
+                .glassButton()
         }
     }
 }
@@ -35,10 +36,9 @@ struct Card<Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) { content }
-            .padding(16)
+            .padding(18)
             .frame(maxWidth: .infinity, alignment: .topLeading)
-            .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 12))
-            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.primary.opacity(0.08)))
+            .glassCard(cornerRadius: 22)
     }
 }
 
@@ -294,6 +294,58 @@ struct AIResponseSheet: View {
             answer = try await AIService.ask(query.prompt)
         } catch {
             self.error = error.localizedDescription
+        }
+    }
+}
+
+// MARK: - App ownership
+
+/// The owning app's icon (or a symbol for tools / macOS), falling back to the file's own icon.
+struct OwnerIcon: View {
+    let owner: AppOwner?
+    var fallback: URL? = nil
+    var size: CGFloat = 20
+
+    var body: some View {
+        Group {
+            if let owner, owner.bundleURL != nil {
+                Image(nsImage: owner.icon).resizable()
+            } else if let owner, let symbol = owner.symbol {
+                Image(systemName: symbol).resizable().scaledToFit().padding(size * 0.18)
+                    .foregroundStyle(owner.source == .apple ? Color.secondary : Color.accentColor)
+                    .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: size * 0.22))
+            } else if let fallback {
+                Image(nsImage: NSWorkspace.shared.icon(forFile: fallback.path)).resizable()
+            } else {
+                Image(systemName: "questionmark.app").resizable().scaledToFit().foregroundStyle(.secondary)
+            }
+        }
+        .frame(width: size, height: size)
+    }
+}
+
+/// "Google Chrome", "likely", "AI", "not installed" chips next to an item name.
+struct OwnerTag: View {
+    let owner: AppOwner?
+
+    var body: some View {
+        if let o = owner {
+            HStack(spacing: 4) {
+                Text(o.name).lineLimit(1)
+                if o.source == .name { Text("likely").foregroundStyle(.secondary) }
+                if o.source == .ai { Image(systemName: "sparkles").foregroundStyle(.purple) }
+            }
+            .font(.caption2.weight(.medium))
+            .padding(.horizontal, 6).padding(.vertical, 2)
+            .foregroundStyle(o.installed ? Color.primary : Color.orange)
+            .background((o.installed ? Color.accentColor : Color.orange).opacity(0.12), in: Capsule())
+            .help(o.note ?? (o.source == .name ? "Matched by folder name" : o.source == .ai ? "Identified by AI" : o.name))
+        } else {
+            Text("Unknown app")
+                .font(.caption2)
+                .padding(.horizontal, 6).padding(.vertical, 2)
+                .foregroundStyle(.secondary)
+                .background(Color.secondary.opacity(0.1), in: Capsule())
         }
     }
 }

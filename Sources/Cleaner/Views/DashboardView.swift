@@ -32,6 +32,7 @@ struct DashboardView: View {
                     ActionTile(item: .largeFiles, text: "Find big and forgotten files across your home folder.")
                     ActionTile(item: .duplicates, text: "Find identical files and keep just one copy.")
                     ActionTile(item: .explorer, text: "Browse every folder and file with its size, then clean or organize.")
+                    ActionTile(item: .appStorage, text: "See each app with its icon and how much space it and its data use.")
                     ActionTile(item: .organizer, text: "Sort Downloads or Desktop into folders by type, date or AI suggestion.")
                     ActionTile(item: .uninstaller, text: "Remove apps completely, including their hidden files.")
                     ActionTile(item: .maintenance, text: "Free memory, thin snapshots, flush DNS, rebuild indexes.")
@@ -121,8 +122,7 @@ private struct ActionTile: View {
             }
             .padding(14)
             .frame(maxWidth: .infinity, minHeight: 120, alignment: .topLeading)
-            .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 12))
-            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.primary.opacity(0.08)))
+            .glassCard(cornerRadius: 12)
             .contentShape(RoundedRectangle(cornerRadius: 12))
         }
         .buttonStyle(.plain)

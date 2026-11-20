@@ -130,7 +130,7 @@ struct ExplorerView: View {
                     if row.canExpand { model.focus(row.id) } else { NSWorkspace.shared.open(row.id) }
                 })
         }
-        .listStyle(.inset(alternatesRowBackgrounds: true))
+        .listStyle(.inset)
         .overlay {
             if model.rows.isEmpty { ProgressView() }
         }

@@ -7,6 +7,34 @@ struct SmartScanView: View {
     @Local private var expanded: Set<String> = []
     @Local private var query: AIQuery?
     @Local private var confirmClean = false
+    @Local private var identifying = false
+    @Local private var identifyMessage: String?
+    /// Bumped after AI identification so rows re-resolve their owners.
+    @Local private var ownerRevision = 0
+
+    private var unidentified: [ScanItem] {
+        _ = ownerRevision
+        return scanner.results.flatMap(\.items).filter {
+            let o = AppOwnerResolver.shared.owner(for: $0.url)
+            return o == nil || o?.source == .name || o?.source == .unknown
+        }
+    }
+
+    private func identifyWithAI() {
+        let items = unidentified.sorted { $0.size > $1.size }.prefix(60).map { ($0.url, Optional($0.size)) }
+        identifying = true
+        identifyMessage = nil
+        Task {
+            do {
+                let n = try await AppOwnerResolver.shared.identifyWithAI(items)
+                identifyMessage = "\(ai.activeProvider.shortName) identified \(n) item(s)."
+            } catch {
+                identifyMessage = error.localizedDescription
+            }
+            ownerRevision += 1
+            identifying = false
+        }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -15,6 +43,14 @@ struct SmartScanView: View {
                     ProgressView().controlSize(.small)
                     Button("Stop") { scanner.stop() }
                 } else {
+                    if !scanner.results.isEmpty, !unidentified.isEmpty {
+                        Button { identifyWithAI() } label: {
+                            Label(identifying ? "Identifying…" : "Identify Apps with AI (\(unidentified.count))", systemImage: "questionmark.app")
+                        }
+                        .disabled(identifying || !ai.isReady)
+                        .help(ai.isReady ? "Ask \(ai.activeProvider.shortName) which app created the folders Cleaner couldn't match"
+                                         : "Connect an AI provider in Settings first")
+                    }
                     if !scanner.results.isEmpty {
                         Button {
                             query = AIQuery(title: "AI review of your scan",
@@ -24,12 +60,16 @@ struct SmartScanView: View {
                     Button { scanner.scan() } label: {
                         Label(scanner.results.isEmpty ? "Scan" : "Rescan", systemImage: "magnifyingglass")
                     }
-                    .buttonStyle(.borderedProminent)
+                    .glassButton(prominent: true)
                 }
             }
             .padding(20)
 
             if !state.hasFullDiskAccess { FDABanner().padding(.horizontal, 20).padding(.bottom, 12) }
+            if let identifyMessage {
+                Label(identifyMessage, systemImage: "sparkles").font(.caption).foregroundStyle(.secondary)
+                    .padding(.horizontal, 20).padding(.bottom, 8)
+            }
 
             Divider()
 
@@ -123,9 +163,12 @@ struct SmartScanView: View {
     private func itemRow(_ item: ScanItem, in cat: CategoryResult) -> some View {
         HStack(spacing: 8) {
             Toggle("", isOn: itemBinding(item.url)).toggleStyle(.checkbox).labelsHidden()
-            FileIcon(url: item.url, size: 16)
+            OwnerIcon(owner: owner(item.url), fallback: item.url, size: 24)
             VStack(alignment: .leading, spacing: 1) {
-                Text(item.name).lineLimit(1)
+                HStack(spacing: 6) {
+                    Text(item.name).lineLimit(1)
+                    OwnerTag(owner: owner(item.url))
+                }
                 Text(item.url.deletingLastPathComponent().displayPath)
                     .font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
             }
@@ -165,11 +208,16 @@ struct SmartScanView: View {
                 Spacer()
                 if scanner.isCleaning { ProgressView().controlSize(.small) }
                 Button("Clean") { confirmClean = true }
-                    .buttonStyle(.borderedProminent)
+                    .glassButton(prominent: true)
                     .controlSize(.large)
                     .disabled(scanner.selected.isEmpty || scanner.isCleaning || scanner.isScanning)
             }
         }
+    }
+
+    private func owner(_ url: URL) -> AppOwner? {
+        _ = ownerRevision
+        return AppOwnerResolver.shared.owner(for: url)
     }
 
     // MARK: Bindings

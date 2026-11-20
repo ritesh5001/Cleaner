@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum SidebarItem: String, CaseIterable, Identifiable, Hashable {
-    case dashboard, smartScan, explorer, largeFiles, duplicates, organizer, uninstaller, maintenance, assistant, settings
+    case dashboard, smartScan, explorer, appStorage, largeFiles, duplicates, organizer, uninstaller, maintenance, assistant, settings
 
     var id: String { rawValue }
 
@@ -12,6 +12,7 @@ enum SidebarItem: String, CaseIterable, Identifiable, Hashable {
         case .largeFiles: "Large & Old Files"
         case .duplicates: "Duplicates"
         case .explorer: "Storage Explorer"
+        case .appStorage: "Storage by App"
         case .organizer: "Organizer"
         case .uninstaller: "Uninstaller"
         case .maintenance: "Memory & Maintenance"
@@ -27,6 +28,7 @@ enum SidebarItem: String, CaseIterable, Identifiable, Hashable {
         case .largeFiles: "doc.badge.ellipsis"
         case .duplicates: "doc.on.doc"
         case .explorer: "chart.bar.doc.horizontal"
+        case .appStorage: "square.grid.3x3.square"
         case .organizer: "folder.badge.gearshape"
         case .uninstaller: "xmark.app"
         case .maintenance: "memorychip"
@@ -47,6 +49,7 @@ final class AppState: ObservableObject {
     let largeFiles = LargeFileFinder()
     let duplicates = DuplicateFinder()
     let explorer = ExplorerModel()
+    let appStorage = AppStorageModel()
     let organizer = OrganizerModel()
     let uninstaller = UninstallerModel()
     let maintenance = MaintenanceModel()

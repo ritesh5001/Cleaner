@@ -44,7 +44,7 @@ final class OrganizerModel: ObservableObject {
 
     // MARK: Categories
 
-    static let typeFolders: [(String, Set<String>)] = [
+    nonisolated static let typeFolders: [(String, Set<String>)] = [
         ("Images", ["jpg", "jpeg", "png", "gif", "heic", "heif", "webp", "svg", "bmp", "tif", "tiff", "raw", "cr2", "nef", "dng", "avif", "ico"]),
         ("Videos", ["mp4", "mov", "m4v", "avi", "mkv", "webm", "wmv", "flv"]),
         ("Audio", ["mp3", "wav", "m4a", "aac", "flac", "ogg", "aiff", "opus"]),

@@ -26,6 +26,9 @@ enum Prompts {
         s += "- Type: \(isDir ? (ext.isEmpty ? "folder" : "package/bundle (.\(ext))") : (ext.isEmpty ? "file" : "file (.\(ext))"))\n"
         if let m = Paths.modified(url) { s += "- Last modified: \(Fmt.date(m))\n" }
         if let category { s += "- Cleaner category: \(category)\n" }
+        if let owner = AppOwnerResolver.shared.owner(for: url) {
+            s += "- Cleaner thinks it belongs to: \(owner.name)\(owner.isCertain ? "" : " (unconfirmed)")\(owner.installed ? "" : ", app no longer installed")\n"
+        }
         if includeListing, isDir {
             let names = Paths.children(of: url).prefix(20).map(\.lastPathComponent)
             if !names.isEmpty { s += "- Contains (first \(names.count) names): \(names.joined(separator: ", "))\n" }

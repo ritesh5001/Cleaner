@@ -10,6 +10,7 @@ struct RootView: View {
                 Section("Clean") {
                     row(.smartScan)
                     row(.explorer)
+                    row(.appStorage)
                     row(.largeFiles)
                     row(.duplicates)
                     row(.uninstaller)
@@ -23,6 +24,8 @@ struct RootView: View {
         } detail: {
             detail
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .scrollContentBackground(.hidden)
+                .background(AppBackground())
         }
     }
 
@@ -38,6 +41,7 @@ struct RootView: View {
         case .largeFiles: LargeFilesView(finder: state.largeFiles)
         case .duplicates: DuplicatesView(finder: state.duplicates)
         case .explorer: ExplorerView(model: state.explorer)
+        case .appStorage: AppStorageView(model: state.appStorage)
         case .organizer: OrganizerView(model: state.organizer)
         case .uninstaller: UninstallerView(model: state.uninstaller)
         case .maintenance: MaintenanceView(model: state.maintenance)

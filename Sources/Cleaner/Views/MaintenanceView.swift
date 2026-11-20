@@ -219,8 +219,7 @@ struct MaintenanceView: View {
             }
         }
         .padding(14)
-        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.primary.opacity(0.08)))
+        .glassCard(cornerRadius: 12)
     }
 
     private var memoryAndSystemPrompt: String {

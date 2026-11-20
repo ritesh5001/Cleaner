@@ -40,7 +40,7 @@ struct AssistantView: View {
             Text("Connect your own AI").font(.title3)
             Text("Use your Claude subscription (through Claude Code), your Google account (through Gemini CLI), or an API key. Each Mac user connects their own.")
                 .multilineTextAlignment(.center).foregroundStyle(.secondary).frame(maxWidth: 440)
-            Button("Open AI Settings") { state.selection = .settings }.buttonStyle(.borderedProminent)
+            Button("Open AI Settings") { state.selection = .settings }.glassButton(prominent: true)
             Spacer()
         }
         .frame(maxWidth: .infinity)
@@ -95,8 +95,7 @@ struct AssistantView: View {
                 }
             }
             .padding(12)
-            .background(m.role == .user ? Color.accentColor.opacity(0.15) : Color(nsColor: .controlBackgroundColor),
-                        in: RoundedRectangle(cornerRadius: 12))
+            .glassCard(cornerRadius: 18, tint: m.role == .user ? .accentColor : nil)
             if m.role == .assistant { Spacer(minLength: 40) }
         }
     }
@@ -107,8 +106,7 @@ struct AssistantView: View {
                 .textFieldStyle(.plain)
                 .lineLimit(1...6)
                 .padding(10)
-                .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
-                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.primary.opacity(0.1)))
+                .glassCard(cornerRadius: 10)
                 .onSubmit { send() }
             Button { send() } label: { Image(systemName: "arrow.up.circle.fill").font(.title) }
                 .buttonStyle(.plain)

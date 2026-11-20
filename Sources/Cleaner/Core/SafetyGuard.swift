@@ -30,6 +30,14 @@ enum SafetyGuard {
         "\(home)/Library/Keychains", "\(home)/Library/Mobile Documents", "\(home)/Library/Mail",
         "\(home)/Library/Messages", "\(home)/Library/Accounts", "\(home)/Library/CloudStorage",
         "\(home)/Library/Photos", "\(home)/Library/Calendars",
+        // Credentials and keys — irreplaceable if lost.
+        "\(home)/.ssh", "\(home)/.gnupg", "\(home)/.aws", "\(home)/.azure", "\(home)/.kube",
+        "\(home)/.password-store", "\(home)/.android-keys", "\(home)/Library/Application Support/1Password",
+    ]
+
+    /// Key and certificate files are never deleted, wherever they are.
+    private static let protectedFileExtensions: Set<String> = [
+        "keystore", "jks", "p12", "pfx", "pem", "key", "mobileprovision", "cer", "kdbx",
     ]
 
     private static let protectedPackageExtensions: Set<String> = [
@@ -65,6 +73,9 @@ enum SafetyGuard {
         if protectedPackageExtensions.contains(url.pathExtension.lowercased())
             || protectedPackageExtensions.contains(where: { p.contains(".\($0)/") }) {
             return "Media library — manage it inside its own app"
+        }
+        if protectedFileExtensions.contains(url.pathExtension.lowercased()) {
+            return "Key or certificate file — irreplaceable if lost"
         }
         if isExcluded(url) { return "In your exclusion list" }
         return nil
