@@ -76,10 +76,11 @@ struct LegendItem: View {
     var body: some View {
         HStack(spacing: 6) {
             Circle().fill(color).frame(width: 8, height: 8)
-            Text(label).foregroundStyle(.secondary)
-            Text(value).monospacedDigit()
+            Text(label).foregroundStyle(.secondary).lineLimit(1)
+            Text(value).monospacedDigit().lineLimit(1)
         }
         .font(.caption)
+        .fixedSize()
     }
 }
 

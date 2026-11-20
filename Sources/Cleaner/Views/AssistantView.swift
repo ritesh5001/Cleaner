@@ -12,8 +12,8 @@ struct AssistantView: View {
                     Picker("Provider", selection: $ai.activeProvider) {
                         ForEach(ai.configuredProviders) { Text($0.shortName).tag($0) }
                     }
-                    .pickerStyle(.segmented)
-                    .frame(width: 180)
+                    .pickerStyle(.menu)
+                    .frame(width: 200)
                     .labelsHidden()
                 }
                 Toggle("Include Mac context", isOn: $model.attachContext)
@@ -38,7 +38,7 @@ struct AssistantView: View {
             Spacer()
             Image(systemName: "key.horizontal").font(.system(size: 44)).foregroundStyle(.secondary)
             Text("Connect your own AI").font(.title3)
-            Text("Paste your Claude or Gemini API key in Settings. It's stored in your macOS Keychain, so each Mac user has their own AI connection.")
+            Text("Use your Claude subscription (through Claude Code), your Google account (through Gemini CLI), or an API key. Each Mac user connects their own.")
                 .multilineTextAlignment(.center).foregroundStyle(.secondary).frame(maxWidth: 440)
             Button("Open AI Settings") { state.selection = .settings }.buttonStyle(.borderedProminent)
             Spacer()

@@ -13,11 +13,15 @@ struct SettingsView: View {
                 Picker("Use for AI features", selection: $ai.activeProvider) {
                     ForEach(AIProviderKind.allCases) { Text($0.displayName).tag($0) }
                 }
-                .pickerStyle(.segmented)
+                .pickerStyle(.menu)
+                if !ai.isReady {
+                    Label("\(ai.activeProvider.shortName) isn't set up yet — see below.", systemImage: "exclamationmark.triangle")
+                        .foregroundStyle(.orange).font(.caption)
+                }
             } header: {
                 Text("AI provider")
             } footer: {
-                Text("Bring your own key. Each Mac user connects their own Claude or Gemini account; keys are stored in that user's macOS Keychain and sent only to the provider you choose.")
+                Text("Every Mac user connects their own AI: a Claude subscription through their own Claude Code login, a Google account through Gemini CLI, or a pay-as-you-go API key stored in their Keychain.")
             }
 
             ForEach(AIProviderKind.allCases) { kind in
@@ -99,7 +103,23 @@ private struct ProviderSection: View {
 
     var body: some View {
         Section {
-            if let masked = ai.maskedKeys[kind] {
+            Text(kind.setupHint).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            if !kind.usesAPIKey {
+                LabeledContent(kind.cliName ?? "CLI") {
+                    HStack {
+                        if let path = ai.cliPaths[kind] {
+                            Label(Paths.display(URL(fileURLWithPath: path)), systemImage: "checkmark.circle.fill")
+                                .foregroundStyle(.green).lineLimit(1).truncationMode(.middle)
+                        } else {
+                            Label("Not found", systemImage: "xmark.circle").foregroundStyle(.secondary)
+                        }
+                        Button(ai.isDetecting ? "Detecting…" : "Detect") { ai.detectCLIs() }.disabled(ai.isDetecting)
+                    }
+                }
+                if ai.cliPaths[kind] == nil {
+                    Link("How to install \(kind.cliName ?? "") →", destination: kind.keyURL).font(.caption)
+                }
+            } else if let masked = ai.maskedKeys[kind] {
                 LabeledContent("API key") {
                     HStack {
                         Text(masked).font(.body.monospaced()).foregroundStyle(.secondary)
@@ -140,7 +160,7 @@ private struct ProviderSection: View {
             }
 
             HStack(spacing: 10) {
-                Button("Fetch available models") { Task { await fetchModels() } }
+                Button(kind.usesAPIKey ? "Fetch available models" : "Show models") { Task { await fetchModels() } }
                 Button("Test connection") { Task { await test() } }
                 if busy { ProgressView().controlSize(.small) }
                 if let status { Text(status).font(.caption).foregroundStyle(.secondary).lineLimit(2) }

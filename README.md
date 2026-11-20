@@ -13,12 +13,20 @@ Requires macOS 14+ and either the Xcode Command Line Tools or Xcode.
 open build/Cleaner.app
 
 swift run Cleaner               # quick dev run without bundling
-swift run -c release Cleaner --scan   # read-only dry run, prints what Smart Scan finds
+swift run -c release Cleaner --scan     # read-only: what Smart Scan would find
+swift run -c release Cleaner --health   # read-only: memory by app, pressure, sync backlog, System Data
+swift run -c release Cleaner --dupes    # read-only: duplicate files report
+swift run -c release Cleaner --explore ~ # read-only: folder sizes like Storage Explorer
+swift run -c release Cleaner --organize-preview ~/Downloads   # read-only organizer plan
+swift run -c release Cleaner --ask "What is ~/Library/Caches?" # test the Claude-subscription bridge
 ```
 
 ### First launch
 1. **Full Disk Access**: System Settings → Privacy & Security → Full Disk Access → add `build/Cleaner.app`. Without it, macOS hides Mail, Safari, Trash, iOS backups and app containers.
-2. **AI**: Settings → AI → paste a Claude key (console.anthropic.com) or a Gemini key (aistudio.google.com). Use *Fetch available models* to pick a model your key can use.
+2. **AI**: Settings → AI → choose one:
+   - **Claude subscription (via Claude Code)**: uses your Pro/Max plan through your own signed-in `claude` CLI. Install Claude Code and run `claude` once to sign in; Cleaner detects it automatically.
+   - **Google account (via Gemini CLI)**: same idea with `gemini`.
+   - **API key** (Claude or Gemini), stored in your Keychain.
 
 > Ad-hoc signed builds look like a new app to macOS after every rebuild, so Full Disk Access and the Keychain "Always Allow" prompt reappear. Build with `SIGN_ID="Apple Development: …" ./scripts/build-app.sh` to avoid this.
 
@@ -39,6 +47,8 @@ Sources/Cleaner/
 - Items go to the Trash by default (except items already in the Trash).
 - Every removal is appended to `~/Library/Application Support/Cleaner/history.log`.
 - Admin tasks use the standard macOS password prompt and fixed, non-user-supplied commands.
+
+Build intermediates go to `~/Library/Caches/cleaner-build`. Cloud-sync engines (Google Drive here) grabbing the SQLite build database inside a synced folder caused "disk I/O error" builds.
 
 **AI privacy**: only metadata (paths with `~` for home, sizes, dates, and optionally names inside a folder) is sent. File contents are never uploaded. All prompts are in `AI/Prompts.swift` so they're easy to audit.
 

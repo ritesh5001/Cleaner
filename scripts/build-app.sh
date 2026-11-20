@@ -13,9 +13,12 @@ cd "$(dirname "$0")/.."
 CONFIG="${1:-release}"
 SIGN_ID="${SIGN_ID:--}"
 APP="build/Cleaner.app"
+# Keep build intermediates outside cloud-synced folders: Google Drive/iCloud grabbing the
+# SQLite build database mid-write causes "accessing build database … disk I/O error".
+SCRATCH="${SCRATCH:-$HOME/Library/Caches/cleaner-build}"
 
-swift build -c "$CONFIG"
-BIN_DIR="$(swift build -c "$CONFIG" --show-bin-path)"
+swift build -c "$CONFIG" --scratch-path "$SCRATCH"
+BIN_DIR="$(swift build -c "$CONFIG" --scratch-path "$SCRATCH" --show-bin-path)"
 
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"

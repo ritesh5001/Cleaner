@@ -106,11 +106,14 @@ enum ContextBuilder {
             for f in files.prefix(15) { s += "- `\(f.url.displayPath)` \(Fmt.bytes(f.size)), modified \(Fmt.date(f.modified))\n" }
         }
 
-        if let current = state.spaceLens.current, !state.spaceLens.entries.isEmpty {
-            s += "\n### Space Lens: biggest items in `\(current.displayPath)`\n"
-            for e in state.spaceLens.entries.prefix(12) {
-                s += "- `\(e.url.displayPath)` \(e.size.map(Fmt.bytes) ?? "…")\n"
-            }
+        let cats = state.explorer.categories.filter { $0.size != nil }
+        if !cats.isEmpty {
+            s += "\n### Disk usage by category\n"
+            for c in cats { s += "- \(c.title): \(Fmt.bytes(c.size ?? 0))\n" }
+        }
+        if let root = state.explorer.root, let kids = root.children, !kids.isEmpty {
+            s += "\n### Storage Explorer: biggest items in `\(root.url.displayPath)`\n"
+            for k in kids.prefix(12) { s += "- `\(k.url.displayPath)` \(k.size.map(Fmt.bytes) ?? "…")\n" }
         }
         return s
     }

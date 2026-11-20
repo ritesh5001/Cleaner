@@ -9,11 +9,12 @@ struct RootView: View {
                 Section("Overview") { row(.dashboard) }
                 Section("Clean") {
                     row(.smartScan)
+                    row(.explorer)
                     row(.largeFiles)
                     row(.duplicates)
-                    row(.spaceLens)
                     row(.uninstaller)
                 }
+                Section("Organize") { row(.organizer) }
                 Section("Speed") { row(.maintenance) }
                 Section("AI") { row(.assistant) }
                 Section { row(.settings) }
@@ -36,7 +37,8 @@ struct RootView: View {
         case .smartScan: SmartScanView(scanner: state.junk)
         case .largeFiles: LargeFilesView(finder: state.largeFiles)
         case .duplicates: DuplicatesView(finder: state.duplicates)
-        case .spaceLens: SpaceLensView(model: state.spaceLens)
+        case .explorer: ExplorerView(model: state.explorer)
+        case .organizer: OrganizerView(model: state.organizer)
         case .uninstaller: UninstallerView(model: state.uninstaller)
         case .maintenance: MaintenanceView(model: state.maintenance)
         case .assistant: AssistantView(model: state.assistant)

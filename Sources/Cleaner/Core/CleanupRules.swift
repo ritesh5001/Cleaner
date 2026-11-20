@@ -48,6 +48,12 @@ enum RuleMode {
     case projectArtifacts(dependencies: Bool)
     /// VS Code-family extension folders that the editor's own registry no longer references.
     case obsoleteEditorExtensions
+    /// Direct children whose name starts with any of these prefixes.
+    case childrenWithPrefixes([String])
+    /// Archives (.zip, .tar.gz…) that sit next to a folder with the same name (already extracted).
+    case extractedArchives
+    /// Editor per-project storage whose project folder no longer exists.
+    case orphanedWorkspaceStorage
 }
 
 struct CleanupRule: Identifiable {
@@ -118,6 +124,21 @@ enum CleanupRules {
                                         "DawnWebGPUCache", "GraphiteDawnCache", "GrShaderCache", "ShaderCache",
                                         "CachedData", "CachedExtensionVSIXs", "Crashpad"], maxDepth: 4),
                     skipRunningApps: true),
+        CleanupRule(id: "web_app_caches", title: "Web App Offline Caches",
+                    detail: "Service-worker storage that browsers and Electron apps keep for web pages and extensions. Sites re-download it; some may lose offline content. Skipped while the app runs.",
+                    icon: "globe.badge.chevron.backward", group: .apps, safety: .review,
+                    roots: [appSupport], mode: .nestedNamed(["CacheStorage", "ScriptCache"], maxDepth: 6),
+                    skipRunningApps: true),
+        CleanupRule(id: "app_logs", title: "App Log Folders",
+                    detail: "Log folders that desktop apps (VS Code, Electron apps…) keep inside Application Support.",
+                    icon: "list.bullet.rectangle", group: .apps, safety: .safe,
+                    roots: [appSupport], mode: .nestedNamed(["logs"], maxDepth: 2), skipRunningApps: true),
+        CleanupRule(id: "workspace_storage", title: "Editor Data for Deleted Projects",
+                    detail: "VS Code / Cursor / Windsurf keep per-project state; these entries belong to project folders that no longer exist.",
+                    icon: "folder.badge.questionmark", group: .apps, safety: .safe,
+                    roots: ["\(appSupport)/Code/User/workspaceStorage", "\(appSupport)/Cursor/User/workspaceStorage",
+                            "\(appSupport)/Windsurf/User/workspaceStorage", "\(appSupport)/Code - Insiders/User/workspaceStorage"],
+                    mode: .orphanedWorkspaceStorage),
         CleanupRule(id: "editor_extensions", title: "Old Editor Extension Versions",
                     detail: "Previous versions of VS Code / Cursor / Windsurf extensions that the editor no longer uses.",
                     icon: "puzzlepiece", group: .apps, safety: .safe,
@@ -193,6 +214,21 @@ enum CleanupRules {
                     detail: "Disk images, installer packages and Android app bundles. Usually not needed after installing or uploading.",
                     icon: "externaldrive.badge.plus", group: .backups, safety: .review,
                     roots: ["~/Downloads"], mode: .extensions(["dmg", "pkg", "mpkg", "iso", "xip", "aab", "apk", "ipa"])),
+        CleanupRule(id: "partial_downloads", title: "Interrupted Downloads",
+                    detail: "Unfinished browser downloads (.crdownload, .part…) older than a day.",
+                    icon: "arrow.down.to.line.compact", group: .backups, safety: .safe,
+                    roots: ["~/Downloads"], mode: .extensions(["crdownload", "download", "part", "partial", "opdownload"]),
+                    minAgeDays: 1),
+        CleanupRule(id: "extracted_archives", title: "Already-Extracted Archives",
+                    detail: "Zip/tar files sitting next to a folder with the same name — you've already unpacked them.",
+                    icon: "doc.zipper", group: .backups, safety: .review,
+                    roots: ["~/Downloads", "~/Desktop"], mode: .extractedArchives),
+        CleanupRule(id: "old_screenshots", title: "Old Screenshots & Screen Recordings",
+                    detail: "Screenshots and recordings older than 30 days on your Desktop and in Downloads.",
+                    icon: "camera.viewfinder", group: .backups, safety: .review,
+                    roots: ["~/Desktop", "~/Downloads", "~/Pictures/Screenshots"],
+                    mode: .childrenWithPrefixes(["Screenshot ", "Screen Shot ", "Screen Recording ", "CleanShot "]),
+                    minAgeDays: 30),
         CleanupRule(id: "orphans", title: "Leftovers of Removed Apps",
                     detail: "Containers, caches and preferences whose app is no longer installed.",
                     icon: "puzzlepiece.extension", group: .backups, safety: .review,
@@ -259,6 +295,12 @@ enum RuleEvaluator {
                 urls += DeepFinder.projectArtifacts(in: root, dependencies: deps)
             case .obsoleteEditorExtensions:
                 urls += DeepFinder.obsoleteExtensions(in: root)
+            case .childrenWithPrefixes(let prefixes):
+                urls += Paths.children(of: root).filter { u in prefixes.contains { u.lastPathComponent.hasPrefix($0) } }
+            case .extractedArchives:
+                urls += DeepFinder.extractedArchives(in: root)
+            case .orphanedWorkspaceStorage:
+                urls += DeepFinder.orphanedWorkspaces(in: root)
             }
             if Task.isCancelled { return nil }
         }
@@ -371,6 +413,33 @@ enum DeepFinder {
         guard let data = try? Data(contentsOf: obsoleteFile),
               let map = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return [] }
         return dirs.filter { map[$0.lastPathComponent] != nil }
+    }
+}
+
+extension DeepFinder {
+    static func extractedArchives(in root: URL) -> [URL] {
+        let fm = FileManager.default
+        let suffixes = [".tar.gz", ".tar.bz2", ".tar.xz", ".tgz", ".zip", ".rar", ".7z", ".tar"]
+        return Paths.children(of: root).compactMap { u in
+            let name = u.lastPathComponent
+            guard let suf = suffixes.first(where: { name.lowercased().hasSuffix($0) }) else { return nil }
+            let base = String(name.dropLast(suf.count))
+            guard !base.isEmpty else { return nil }
+            var isDir: ObjCBool = false
+            let sibling = root.appendingPathComponent(base).path
+            return fm.fileExists(atPath: sibling, isDirectory: &isDir) && isDir.boolValue ? u : nil
+        }
+    }
+
+    static func orphanedWorkspaces(in root: URL) -> [URL] {
+        Paths.children(of: root).filter { dir in
+            let meta = dir.appendingPathComponent("workspace.json")
+            guard let data = try? Data(contentsOf: meta),
+                  let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+                  let uri = (json["folder"] ?? json["workspace"]) as? String,
+                  uri.hasPrefix("file://"), let url = URL(string: uri) else { return false }
+            return !FileManager.default.fileExists(atPath: url.path)
+        }
     }
 }
 

@@ -12,7 +12,15 @@ struct DashboardView: View {
                 if !state.hasFullDiskAccess { FDABanner() }
 
                 HStack(alignment: .top, spacing: 16) {
-                    Card { storage }
+                    Button {
+                        state.explorer.openIfNeeded(URL(fileURLWithPath: "/"))
+                        state.selection = .explorer
+                    } label: {
+                        Card { storage }
+                            .contentShape(RoundedRectangle(cornerRadius: 12))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Open Storage Explorer to see the size of every folder and file")
                     Card { memory }
                 }
 
@@ -23,10 +31,11 @@ struct DashboardView: View {
                     ActionTile(item: .smartScan, text: "Find caches, logs, developer junk, old installers and leftovers.")
                     ActionTile(item: .largeFiles, text: "Find big and forgotten files across your home folder.")
                     ActionTile(item: .duplicates, text: "Find identical files and keep just one copy.")
-                    ActionTile(item: .spaceLens, text: "See exactly which folders take up your disk.")
+                    ActionTile(item: .explorer, text: "Browse every folder and file with its size, then clean or organize.")
+                    ActionTile(item: .organizer, text: "Sort Downloads or Desktop into folders by type, date or AI suggestion.")
                     ActionTile(item: .uninstaller, text: "Remove apps completely, including their hidden files.")
                     ActionTile(item: .maintenance, text: "Free memory, thin snapshots, flush DNS, rebuild indexes.")
-                    ActionTile(item: .assistant, text: "Ask Claude or Gemini what's safe to delete on your Mac.")
+                    ActionTile(item: .assistant, text: "Ask your Claude subscription (or Gemini) what is safe to delete.")
                 }
 
                 HStack(alignment: .top, spacing: 16) {
@@ -42,7 +51,7 @@ struct DashboardView: View {
                             Text("Model: \(ai.model(for: ai.activeProvider))").font(.caption).foregroundStyle(.secondary)
                         } else {
                             Text("Not connected").font(.title3.weight(.semibold))
-                            Button("Add your Claude or Gemini key") { state.selection = .settings }
+                            Button("Connect your Claude subscription or an API key") { state.selection = .settings }
                                 .buttonStyle(.link)
                         }
                     }
@@ -56,7 +65,12 @@ struct DashboardView: View {
     @ViewBuilder
     private var storage: some View {
         let d = state.disk
-        Label("Macintosh HD", systemImage: "internaldrive").font(.headline)
+        HStack {
+            Label("Macintosh HD", systemImage: "internaldrive").font(.headline)
+            Spacer()
+            Text("Explore").font(.caption).foregroundStyle(Color.accentColor)
+            Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(Color.accentColor)
+        }
         Text("\(Fmt.bytes(d.availableIncludingPurgeable)) available of \(Fmt.bytes(d.total))")
             .font(.title3.weight(.semibold)).monospacedDigit()
         UsageBar(segments: [

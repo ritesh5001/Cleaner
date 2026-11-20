@@ -23,6 +23,65 @@ _Researched November 2026._
 4. **Fear of deleting the wrong thing.** This is why an AI that explains "what is this and what happens if I delete it" is valuable.
 5. **Apps that leave junk behind** after being dragged to the Trash.
 
+## 2b. Hands-on terminal research (this MacBook, 20 Nov 2026)
+
+Read-only experiments on a 16 GB / 256 GB Apple Silicon MacBook (macOS 27.2) with `du`, `find`, `vm_stat`, `sysctl`, `tmutil`, `hdiutil`, `ps` and `md5`. Nothing was deleted.
+
+### Where junk actually forms
+
+| Location | Found | What it is | Cleaner rule |
+|---|---|---|---|
+| `~/.npm/_cacache` + `_npx`, `~/.gradle/caches`, Homebrew | **9.5 GB** | Package download caches | Package Manager Caches (Safe) |
+| `~/Library/Caches/*` (Chrome 3 GB, Brave 2 GB, Copilot, Playwright, updaters) | **8.2 GB** | App caches | User Cache Files (Safe) |
+| `**/.next`, `.turbo`, `.nuxt`… in projects | **4.9 GB** | Regenerable build output | **New:** Project Build Output (Safe) |
+| `**/node_modules`, `.venv`, `Pods`, `target` | **2.6 GB** | Reinstallable dependencies | **New:** Project Dependencies (Review) |
+| `~/Library/Application Support/*/{Cache,Code Cache,GPUCache,CachedData,CachedExtensionVSIXs}` | **5.1 GB** | Chromium/Electron caches *inside* app data (VS Code, Claude, OpenBot…) — invisible to normal cache cleaners | **New:** Caches Inside Apps (Safe, skipped while the app runs, and the skipped amount is reported) |
+| `~/Library/Application Support/Claude/vm_bundles` | **12 GB** | Claude Desktop VM image, re-downloaded on demand | **New:** AI App VM Images (Caution) |
+| `/var/folders/…/C` (`getconf DARWIN_USER_CACHE_DIR`) | **1.7 GB** | Hidden per-user macOS cache (Blender 1 GB, clang modules 300 MB) | **New:** Hidden macOS App Caches (Safe, Apple entries skipped) |
+| `~/.vscode/extensions/*` not listed in `extensions.json` | **1.0 GB** | Old extension versions VS Code left behind | **New:** Old Editor Extension Versions (Safe) |
+| `~/.cache/codex-runtimes/codex-runtime-install-*` | **640 MB** | Interrupted runtime downloads | **New:** Interrupted Runtime Installs (Safe) |
+| `~/Downloads/*.aab/.apk/.dmg` | 313 MB | Build/installer artifacts | Installers in Downloads (now includes aab/apk/ipa) |
+| Duplicates in Downloads/Desktop/Documents | **101 MB, 114 groups** | Same file saved twice | **New:** Duplicates screen (SHA-256, always keeps one) |
+| `/private/var/vm` (swap + sleepimage) | 2.2 GB | Virtual memory | Explained only (macOS-managed) |
+| `/private/var/db/diagnostics` + `uuidtext` | 2.0 GB | Unified logs | Explained only (macOS-managed) |
+
+**Smart Scan total on this Mac: 17.3 GB → 29.3 GB** after the new rules, plus ~5 GB more inside apps that were running during the scan.
+
+### Can it clean "cache memory" (RAM)?
+- `purge` without admin rights → `Unable to purge disk buffers: Operation not permitted`. With the admin prompt it works, but the effect is temporary: macOS refills the file cache because cached files make the Mac faster.
+- Measured on this Mac: **file cache 2.5 GB** (gets handed back to apps immediately when needed, not a problem), **compressed 6.6 GB and swap 1.6 → 5.6 GB**, and memory pressure at **Warning** (`kern.memorystatus_vm_pressure_level = 2`). That is the real slowdown.
+- Biggest memory users, counting all of each app's helper processes together: Chrome 1.15 GB (23 processes), VS Code 0.8 GB, **`mcp-wordpress-remote` 0.59 GB in 60 processes** (one MCP server per WordPress site connection), Grok Bot 0.55 GB, Brave 0.4 GB.
+- **Conclusion:** Cleaner shows the honest picture (pressure, compression, swap, memory per app including helpers) with one-click Quit, and keeps `purge` as an optional admin task clearly labelled "temporary relief".
+
+### Problems found that no cleaner detects
+1. **Google Drive is backing up developer folders**: 177k files queued in `~/PlayGround/.tmp.driveupload` and 23k in `~/Office`, because `node_modules`/`.next` sit inside synced folders. This costs CPU, battery, bandwidth and Drive quota. → **New health check.**
+2. **That same 180k-entry staging folder made `FileManager.enumerator` silently stop the entire home-folder walk** (it covered 2.4k entries and then ended with no error). → Cleaner now uses its own walker (`DirWalker`) that lists each folder independently, and never touches sync-engine folders.
+3. **A leftover installer image (`GoogleDrive.dmg`) was still mounted.** → **New:** Mounted disk images card with Eject / Eject & Trash.
+4. **Background tools that start dozens of copies of themselves** (MCP servers). → **New health check.**
+5. **Two browsers open at once.** → **New health check.**
+
+### Second sweep: more junk sources (same day)
+
+| Source | On this Mac | Cleaner |
+|---|---|---|
+| Homebrew old versions + downloads (`brew cleanup -n --prune=all`) | 941 MB | Health check shows exact size + "Homebrew Cleanup" task |
+| Service-worker `CacheStorage` in browsers/Electron apps | 1.04 GB (27 dirs) | Web App Offline Caches (Review, skipped while app runs) |
+| Old Chromium engine kept inside `Google Chrome.app` until relaunch | 732 MB | Health check: "restart Chrome" (never edit signed app bundles) |
+| `Application Support/*/logs` (VS Code 139 MB) | 151 MB | App Log Folders |
+| VS Code `workspaceStorage` for deleted projects | 18 entries | Editor Data for Deleted Projects (checks `workspace.json`) |
+| Screenshots/recordings > 30 days | 15 files, 26 MB | Old Screenshots & Screen Recordings (Review) |
+| Archives next to their extracted folder | 2 | Already-Extracted Archives (Review) |
+| `.crdownload`/`.part` > 1 day | 0 | Interrupted Downloads |
+| Unavailable iOS simulators | n/a | "Remove Unavailable Simulators" task |
+| AI tool history (`~/.claude/projects` 1 GB, `~/.codex/sessions` 0.8 GB) | mostly < 30 days | Not auto-cleaned (it's your history); visible in Storage Explorer |
+
+**Hard links:** Google Drive's staging folder hard-links your files, so naive size tools count the same data twice (16.7 GB reported vs 9.1 GB real). Cleaner counts each hard-linked file once (like `du`), and gives the data to the visible folder rather than the hidden staging copy.
+
+### Claude subscription instead of an API key
+- Cleaner can run the user's **own** Claude Code CLI (`claude -p --output-format json --tools "" --strict-mcp-config --no-session-persistence`). The person's Claude Pro/Max login stays inside Claude Code: Cleaner never sees or stores it, and usage counts toward their plan. Tested: ~3–6 s per answer.
+- Gemini CLI is supported the same way, for people with a Google account (not installed on the test Mac, so untested).
+- ⚠️ **Distribution note:** Anthropic's docs say third-party products should not offer claude.ai (subscription) login unless Anthropic has approved it. Bridging to your own Claude Code on your own Mac is fine for personal use. If you ship Cleaner to other people, keep API keys as the default and check with Anthropic before advertising subscription support.
+
 ## 3. Feature list
 
 ### ✅ Built in v0.1 (this commit)

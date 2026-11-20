@@ -8,6 +8,32 @@ enum Entry {
         if args.contains("--scan") { CLI.dryRunScan(); exit(0) }
         if args.contains("--dupes") { CLI.dupes(); exit(0) }
         if args.contains("--health") { CLI.health(); exit(0) }
+        if let i = args.firstIndex(of: "--organize-selftest"), i + 1 < args.count {
+            CLI.organizerSelfTest(URL(fileURLWithPath: args[i + 1])); exit(0)
+        }
+        if let i = args.firstIndex(of: "--organize-preview"), i + 1 < args.count {
+            CLI.organizePreview(URL(fileURLWithPath: args[i + 1])); exit(0)
+        }
+        if let i = args.firstIndex(of: "--explore"), i + 1 < args.count {
+            CLI.explore(URL(fileURLWithPath: args[i + 1])); exit(0)
+        }
+        if let i = args.firstIndex(of: "--ask"), i + 1 < args.count {
+            // `Cleaner --ask "question"` — tests the Claude-subscription bridge (Claude Code CLI).
+            let question = args[i + 1]
+            let sem = DispatchSemaphore(value: 0)
+            Task.detached {
+                guard let path = CLILocator.detect("claude") else { print("claude CLI not found"); sem.signal(); return }
+                print("Using Claude Code at \(path)…")
+                do {
+                    let answer = try await ClaudeCodeClient(binary: path).complete(
+                        system: Prompts.system, messages: [ChatMessage(role: .user, text: question)], model: "sonnet", maxTokens: 1000)
+                    print(answer)
+                } catch { print("ERROR:", error.localizedDescription) }
+                sem.signal()
+            }
+            sem.wait()
+            exit(0)
+        }
         CleanerApp.main()
     }
 }
@@ -38,6 +64,57 @@ enum CLI {
             if r.heldTotal > 0 { print("    + \(Fmt.bytes(r.heldTotal)) held by running apps: \(r.holdingApps.joined(separator: ", "))") }
         }
         print("\nTotal found: \(Fmt.bytes(total)) in \(String(format: "%.1f", Date().timeIntervalSince(start)))s")
+    }
+
+    /// `Cleaner --organize-preview <dir>`: read-only "by type" plan.
+    static func organizePreview(_ dir: URL) {
+        let files = OrganizerModel.candidates(in: dir)
+        let groups = Dictionary(grouping: files) { OrganizerModel.typeFolder(for: $0.url) }
+        print("\(files.count) loose files in \(dir.displayPath) would go into \(groups.count) folders:")
+        for (k, v) in groups.sorted(by: { $0.value.count > $1.value.count }) {
+            print("  \(k.padding(toLength: 14, withPad: " ", startingAt: 0)) \(v.count) files, \(Fmt.bytes(v.reduce(0) { $0 + $1.size }))")
+        }
+    }
+
+    /// `Cleaner --organize-selftest <empty dir>`: creates dummy files, organizes them, undoes, verifies.
+    static func organizerSelfTest(_ dir: URL) {
+        let fm = FileManager.default
+        try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        let names = ["photo.jpg", "invoice.pdf", "notes.md", "setup.dmg", "clip.mov", "data.csv", "photo (2).jpg", "noext"]
+        for n in names { fm.createFile(atPath: dir.appendingPathComponent(n).path, contents: Data(n.utf8), attributes: [.modificationDate: Date().addingTimeInterval(-3600)]) }
+        try? fm.createDirectory(at: dir.appendingPathComponent("ExistingFolder"), withIntermediateDirectories: true)
+        // A pre-existing Images/photo.jpg forces a name conflict.
+        try? fm.createDirectory(at: dir.appendingPathComponent("Images"), withIntermediateDirectories: true)
+        fm.createFile(atPath: dir.appendingPathComponent("Images/photo.jpg").path, contents: Data("old".utf8))
+
+        let before = Set(try! fm.contentsOfDirectory(atPath: dir.path))
+        let moves = OrganizerModel.candidates(in: dir).map { PlannedMove(source: $0.url, folder: OrganizerModel.typeFolder(for: $0.url), size: $0.size) }
+        let (done, failed) = OrganizerModel.perform(moves, base: dir)
+        print("Moved \(done.count), failed \(failed.count)")
+        for r in done { print("  \(URL(fileURLWithPath: r.from).lastPathComponent) → \(r.to.replacingOccurrences(of: dir.path + "/", with: ""))") }
+        let restored = OrganizerModel.restore(done)
+        let after = Set(try! fm.contentsOfDirectory(atPath: dir.path))
+        let oldPhotoIntact = (try? String(contentsOfFile: dir.appendingPathComponent("Images/photo.jpg").path, encoding: .utf8)) == "old"
+        print("Restored \(restored). Folder identical to before: \(before == after). Pre-existing Images/photo.jpg untouched: \(oldPhotoIntact)")
+        print(before == after && oldPhotoIntact && failed.isEmpty ? "SELFTEST PASS" : "SELFTEST FAIL  before=\(before.sorted()) after=\(after.sorted())")
+    }
+
+    /// `Cleaner --explore <dir>`: measures a folder like the Storage Explorer and prints its biggest children.
+    static func explore(_ dir: URL) {
+        let start = Date()
+        let kids = Paths.children(of: dir).sorted { !$0.lastPathComponent.hasPrefix(".") && $1.lastPathComponent.hasPrefix(".") }.map { ($0, Paths.isDirectory($0) ? SizeIndex.shared.measure($0) : FileSizer.size(of: $0)) }
+            .sorted { $0.1 > $1.1 }
+        let total = kids.reduce(Int64(0)) { $0 + $1.1 }
+        print("\(dir.displayPath): \(Fmt.bytes(total)) (\(String(format: "%.1f", Date().timeIntervalSince(start)))s)")
+        for (u, s) in kids.prefix(10) {
+            print("  \(Fmt.bytes(s).padding(toLength: 10, withPad: " ", startingAt: 0)) \(String(format: "%5.1f%%", total > 0 ? Double(s) * 100 / Double(total) : 0))  \(u.lastPathComponent)")
+        }
+        // Drilling into the biggest child should now be instant thanks to the size index.
+        if let big = kids.first?.0, Paths.isDirectory(big) {
+            let t = Date()
+            let sub = Paths.children(of: big).map { ($0, SizeIndex.shared.measure($0)) }.sorted { $0.1 > $1.1 }
+            print("Drill into \(big.lastPathComponent): \(String(format: "%.2f", Date().timeIntervalSince(t)))s (cached) — top: \(sub.prefix(3).map { "\($0.0.lastPathComponent) \(Fmt.bytes($0.1))" }.joined(separator: ", "))")
+        }
     }
 
     /// `Cleaner --dupes`: read-only duplicate report for Downloads/Desktop/Documents/Pictures.

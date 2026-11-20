@@ -80,6 +80,12 @@ final class MaintenanceModel: ObservableObject {
                         icon: "square.stack.3d.up",
                         command: "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -r -domain local -domain system -domain user",
                         admin: false),
+        MaintenanceTask(id: "brew", title: "Homebrew Cleanup",
+                        detail: "Removes old versions of Homebrew packages and their download cache (`brew cleanup --prune=all`).",
+                        icon: "mug", command: "/bin/zsh -lc 'brew cleanup --prune=all'", admin: false),
+        MaintenanceTask(id: "simctl", title: "Remove Unavailable Simulators",
+                        detail: "Deletes iOS simulators for runtimes that are no longer installed (`xcrun simctl delete unavailable`).",
+                        icon: "iphone.slash", command: "/usr/bin/xcrun simctl delete unavailable", admin: false),
         MaintenanceTask(id: "quicklook", title: "Reset Quick Look",
                         detail: "Clears the Quick Look thumbnail cache when previews look wrong.",
                         icon: "eye", command: "/usr/bin/qlmanage -r; /usr/bin/qlmanage -r cache", admin: false),
@@ -255,6 +261,8 @@ final class MaintenanceModel: ObservableObject {
         Task {
             async let ps = Task.detached { Shell.run("/bin/ps", ["-axo", "pid=,rss=,comm="]) }.value
             async let backlog = Task.detached { Self.syncUploadBacklog() }.value
+            async let brew = Task.detached { Self.homebrewReclaimable() }.value
+            async let staleBrowsers = Task.detached { Self.browsersWithOldEngines() }.value
             let apps = Self.groupByApp(await ps.out)
             appMemory = apps
             loadImages()
@@ -283,6 +291,14 @@ final class MaintenanceModel: ObservableObject {
                                      severity: .review))
             }
 
+            // Background tools that fan out into many copies (e.g. one MCP server per connection).
+            for a in apps where a.bundlePath == nil && a.processes >= 15 && a.memory > 200_000_000 {
+                found.append(Insight(id: "fanout-\(a.name)", icon: "square.stack.3d.forward.dottedline",
+                                     title: "“\(a.name)” is running \(a.processes) copies (\(Fmt.bytes(a.memory)))",
+                                     detail: "A background tool started many identical processes — common with MCP servers or dev watchers that launch one process per connection. Disable unused connections or restart the app that launched them.",
+                                     severity: .review))
+            }
+
             for b in await backlog where b.files > 5000 {
                 found.append(Insight(id: "sync-\(b.folder)", icon: "icloud.and.arrow.up",
                                      title: "Cloud sync is uploading \(b.files.formatted()) files from \(Paths.display(URL(fileURLWithPath: b.folder)))",
@@ -290,9 +306,47 @@ final class MaintenanceModel: ObservableObject {
                                      severity: .review))
             }
 
+            if let brewText = await brew {
+                found.append(Insight(id: "brew", icon: "mug",
+                                     title: "Homebrew can free \(brewText)",
+                                     detail: "Old package versions and downloads are kept until you run cleanup. Use “Homebrew Cleanup” below.",
+                                     severity: .safe))
+            }
+            for b in await staleBrowsers {
+                found.append(Insight(id: "engine-\(b.name)", icon: "arrow.triangle.2.circlepath",
+                                     title: "\(b.name) is holding an old version (\(Fmt.bytes(b.size)))",
+                                     detail: "The browser downloaded an update but keeps the previous engine inside the app until it restarts. Quit and reopen \(b.name) to free the space.",
+                                     severity: .safe))
+            }
+
             insights = found
             isCheckingHealth = false
         }
+    }
+
+    /// "This operation would free approximately 941.2MB" from a Homebrew dry run.
+    nonisolated static func homebrewReclaimable() -> String? {
+        let r = Shell.run("/bin/zsh", ["-lc", "command -v brew >/dev/null && brew cleanup -n --prune=all 2>/dev/null | tail -1"])
+        guard let range = r.out.range(of: "approximately ") else { return nil }
+        let rest = r.out[range.upperBound...]
+        let amount = rest.prefix { !$0.isWhitespace }
+        return amount.isEmpty || amount.hasPrefix("0") ? nil : String(amount)
+    }
+
+    /// Chromium browsers keep the previous framework version inside the app until relaunch.
+    nonisolated static func browsersWithOldEngines() -> [(name: String, size: Int64)] {
+        let apps = ["Google Chrome", "Brave Browser", "Microsoft Edge", "Arc", "Vivaldi", "Opera"]
+        var out: [(String, Int64)] = []
+        for app in apps {
+            let versions = URL(fileURLWithPath: "/Applications/\(app).app/Contents/Frameworks/\(app) Framework.framework/Versions")
+            let dirs = Paths.children(of: versions).filter { $0.lastPathComponent != "Current" && Paths.isDirectory($0) }
+            guard dirs.count > 1 else { continue }
+            let current = (try? FileManager.default.destinationOfSymbolicLink(atPath: versions.appendingPathComponent("Current").path)) ?? ""
+            let old = dirs.filter { $0.lastPathComponent != current }
+            let size = old.reduce(Int64(0)) { $0 + FileSizer.size(of: $1) }
+            if size > 0 { out.append((app, size)) }
+        }
+        return out
     }
 
     /// Finds Google Drive upload staging folders (`.tmp.driveupload`) up to two levels below home.

@@ -125,8 +125,8 @@ enum FileSizer {
 
     private static let keys: [URLResourceKey] = [
         .isRegularFileKey, .isSymbolicLinkKey, .totalFileAllocatedSizeKey, .fileAllocatedSizeKey,
+        .linkCountKey, .fileResourceIdentifierKey,
     ]
-    private static let keySet = Set(keys)
 
     /// Allocated size on disk of a file or a whole folder tree. Honors task cancellation.
     static func size(of url: URL) -> Int64 {
@@ -136,9 +136,13 @@ enum FileSizer {
         if skipPaths.contains(url.path) { return 0 }
 
         var total: Int64 = 0
+        var seenLinks = Set<NSObject>()
         DirWalker.walk(url, keys: keys) { item, _, rv in
             if rv.isDirectory == true { return skipPaths.contains(item.path) ? .skip : .descend }
             if rv.isRegularFile == true {
+                // Hard links share data: count it once (like `du`).
+                if (rv.linkCount ?? 1) > 1, let id = rv.fileResourceIdentifier as? NSObject,
+                   !seenLinks.insert(id).inserted { return .skip }
                 total += Int64(rv.totalFileAllocatedSize ?? rv.fileAllocatedSize ?? 0)
             }
             return .skip
@@ -174,6 +178,46 @@ enum Shell {
             status: p.terminationStatus,
             out: String(decoding: od, as: UTF8.self),
             err: String(decoding: ed, as: UTF8.self)
+        )
+    }
+
+    /// Runs a program with stdin, working directory, environment and a hard timeout.
+    static func run(_ path: String, _ args: [String], stdin: String, cwd: URL? = nil,
+                    env: [String: String]? = nil, timeout: TimeInterval) -> Result {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: path)
+        p.arguments = args
+        if let cwd { p.currentDirectoryURL = cwd }
+        if let env { p.environment = env }
+        let i = Pipe(), o = Pipe(), e = Pipe()
+        p.standardInput = i
+        p.standardOutput = o
+        p.standardError = e
+        do { try p.run() } catch {
+            return Result(status: -1, out: "", err: error.localizedDescription)
+        }
+        let input = Data(stdin.utf8)
+        DispatchQueue.global().async {
+            try? i.fileHandleForWriting.write(contentsOf: input)
+            try? i.fileHandleForWriting.close()
+        }
+        var errData = Data()
+        let errDone = DispatchSemaphore(value: 0)
+        DispatchQueue.global().async {
+            errData = e.fileHandleForReading.readDataToEndOfFile()
+            errDone.signal()
+        }
+        DispatchQueue.global().asyncAfter(deadline: .now() + timeout) {
+            if p.isRunning { p.terminate() }
+        }
+        let outData = o.fileHandleForReading.readDataToEndOfFile()
+        errDone.wait()
+        p.waitUntilExit()
+        let timedOut = p.terminationReason == .uncaughtSignal
+        return Result(
+            status: p.terminationStatus,
+            out: String(decoding: outData, as: UTF8.self),
+            err: timedOut ? "Timed out after \(Int(timeout))s" : String(decoding: errData, as: UTF8.self)
         )
     }
 
