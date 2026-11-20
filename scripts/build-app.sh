@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds Cleaner.app into ./build using only the Xcode Command Line Tools.
+# Builds "Storage Fusion.app" into ./build using only the Xcode Command Line Tools.
 #
 #   ./scripts/build-app.sh            # release build, ad-hoc signed
 #   ./scripts/build-app.sh debug      # debug build
@@ -12,7 +12,7 @@ cd "$(dirname "$0")/.."
 
 CONFIG="${1:-release}"
 SIGN_ID="${SIGN_ID:--}"
-APP="build/Cleaner.app"
+APP="build/Storage Fusion.app"
 # Keep build intermediates outside cloud-synced folders: Google Drive/iCloud grabbing the
 # SQLite build database mid-write causes "accessing build database … disk I/O error".
 SCRATCH="${SCRATCH:-$HOME/Library/Caches/cleaner-build}"
@@ -22,10 +22,18 @@ BIN_DIR="$(swift build -c "$CONFIG" --scratch-path "$SCRATCH" --show-bin-path)"
 
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp "$BIN_DIR/Cleaner" "$APP/Contents/MacOS/Cleaner"
+cp "$BIN_DIR/StorageFusion" "$APP/Contents/MacOS/StorageFusion"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
-[ -f Resources/AppIcon.icns ] && cp Resources/AppIcon.icns "$APP/Contents/Resources/" || true
+cp -R "$BIN_DIR/StorageFusion_StorageFusion.bundle" "$APP/Contents/Resources/"
+if [ -f Resources/AppIcon.icns ]; then
+  cp Resources/AppIcon.icns "$APP/Contents/Resources/"
+else
+  ICON_TMP="$(mktemp -d)"
+  trap 'rm -rf "$ICON_TMP"' EXIT
+  ICONSET="$(swift scripts/make-icon.swift "$ICON_TMP")"
+  iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
+fi
 
 codesign --force --sign "$SIGN_ID" --timestamp=none "$APP"
 echo "✓ Built $APP (signed with: $SIGN_ID)"
-echo "  Run it:  open $APP"
+echo "  Run it:  open \"$APP\""

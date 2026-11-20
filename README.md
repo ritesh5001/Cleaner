@@ -1,4 +1,4 @@
-# Cleaner
+# Storage Fusion
 
 A native macOS (SwiftUI) storage cleaner and optimizer with **bring-your-own AI**: each user connects their own Claude or Gemini API key.
 
@@ -9,23 +9,23 @@ See [docs/RESEARCH.md](docs/RESEARCH.md) for the market research and the full ro
 Requires macOS 14+ and either the Xcode Command Line Tools or Xcode.
 
 ```bash
-./scripts/make-dmg.sh           # builds dist/Cleaner-<version>.dmg (drag-to-install)
-./scripts/build-app.sh          # builds build/Cleaner.app
-open build/Cleaner.app
+./scripts/make-dmg.sh           # builds dist/Storage-Fusion-<version>.dmg (drag-to-install)
+./scripts/build-app.sh          # builds "build/Storage Fusion.app"
+open "build/Storage Fusion.app"
 
-swift run Cleaner               # quick dev run without bundling
-swift run -c release Cleaner --scan     # read-only: what Smart Scan would find
-swift run -c release Cleaner --health   # read-only: memory by app, pressure, sync backlog, System Data
-swift run -c release Cleaner --dupes    # read-only: duplicate files report
-swift run -c release Cleaner --explore ~ # read-only: folder sizes like Storage Explorer
-swift run -c release Cleaner --organize-preview ~/Downloads   # read-only organizer plan
-swift run -c release Cleaner --ask "What is ~/Library/Caches?" # test the Claude-subscription bridge
-swift run -c release Cleaner --agent "clean browser caches"     # DRY RUN of the Cleanup Agent's plan
-swift run -c release Cleaner --apps                             # storage by app (read-only)
+swift run StorageFusion               # quick dev run without bundling
+swift run -c release StorageFusion --scan     # read-only: what Smart Scan would find
+swift run -c release StorageFusion --health   # read-only: memory by app, pressure, sync backlog, System Data
+swift run -c release StorageFusion --dupes    # read-only: duplicate files report
+swift run -c release StorageFusion --explore ~ # read-only: folder sizes like Storage Explorer
+swift run -c release StorageFusion --organize-preview ~/Downloads   # read-only organizer plan
+swift run -c release StorageFusion --ask "What is ~/Library/Caches?" # test the Claude-subscription bridge
+swift run -c release StorageFusion --agent "clean browser caches"     # DRY RUN of the Cleanup Agent's plan
+swift run -c release StorageFusion --apps                             # storage by app (read-only)
 ```
 
 ### First launch
-1. **Full Disk Access**: System Settings → Privacy & Security → Full Disk Access → add `build/Cleaner.app`. Without it, macOS hides Mail, Safari, Trash, iOS backups and app containers.
+1. **Full Disk Access**: System Settings → Privacy & Security → Full Disk Access → add `"build/Storage Fusion.app"`. Without it, macOS hides Mail, Safari, Trash, iOS backups and app containers.
 2. **AI**: Settings → AI → choose one:
    - **Claude subscription (via Claude Code)**: uses your Pro/Max plan through your own signed-in `claude` CLI. Install Claude Code and run `claude` once to sign in; Cleaner detects it automatically.
    - **Google account (via Gemini CLI)**: same idea with `gemini`.

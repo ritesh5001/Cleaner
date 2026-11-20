@@ -4,6 +4,7 @@ import AppKit
 @main
 enum Entry {
     @MainActor static func main() {
+        migrateSettingsFromOldName()
         let args = CommandLine.arguments
         if args.contains("--scan") { CLI.dryRunScan(); exit(0) }
         if args.contains("--dupes") { CLI.dupes(); exit(0) }
@@ -107,6 +108,19 @@ enum Entry {
         }
         CleanerApp.main()
     }
+}
+
+/// Carries settings over from when the app was called "Cleaner" (bundle id app.cleaner.mac).
+@MainActor
+func migrateSettingsFromOldName() {
+    let d = UserDefaults.standard
+    guard Bundle.main.bundleIdentifier == "app.storagefusion.mac", !d.bool(forKey: "migratedFromCleaner") else { return }
+    if let old = d.persistentDomain(forName: "app.cleaner.mac") {
+        for (key, value) in old where !key.hasPrefix("NS") && d.object(forKey: key) == nil {
+            d.set(value, forKey: key)
+        }
+    }
+    d.set(true, forKey: "migratedFromCleaner")
 }
 
 /// `Cleaner --scan` prints what Smart Scan would find. Read-only: never deletes anything.
@@ -333,9 +347,12 @@ struct CleanerApp: App {
                 .frame(width: 680, height: 640)
         }
 
-        MenuBarExtra("Storage Fusion", systemImage: "sparkles") {
+        MenuBarExtra {
             MenuBarView()
                 .environmentObject(state)
+        } label: {
+            Image(nsImage: AppBrand.menuBarIcon)
+                .accessibilityLabel("Storage Fusion")
         }
         .menuBarExtraStyle(.window)
     }
@@ -345,6 +362,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Needed when launched as a bare executable (swift run); harmless inside the .app bundle.
         NSApp.setActivationPolicy(.regular)
+        if Bundle.main.url(forResource: "AppIcon", withExtension: "icns") == nil {
+            NSApp.applicationIconImage = AppBrand.icon
+        }
         NSApp.activate()
     }
 

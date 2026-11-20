@@ -7,7 +7,14 @@ struct DashboardView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                PageHeader(title: "Overview", subtitle: "\(MacInfo.chip.isEmpty ? MacInfo.model : MacInfo.chip) · macOS \(MacInfo.osVersion)")
+                HStack(spacing: 8) {
+                    Image(nsImage: AppBrand.icon)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 50, height: 50)
+                        .accessibilityHidden(true)
+                    PageHeader(title: "Overview", subtitle: "\(MacInfo.chip.isEmpty ? MacInfo.model : MacInfo.chip) · macOS \(MacInfo.osVersion)")
+                }
 
                 if !state.hasFullDiskAccess { FDABanner() }
 

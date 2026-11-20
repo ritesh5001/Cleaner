@@ -3,15 +3,15 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleDisplayName</key>
-	<string>Cleaner</string>
+	<string>Storage Fusion</string>
 	<key>CFBundleExecutable</key>
-	<string>Cleaner</string>
+	<string>StorageFusion</string>
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
-	<string>app.cleaner.mac</string>
+	<string>app.storagefusion.mac</string>
 	<key>CFBundleName</key>
-	<string>Cleaner</string>
+	<string>Storage Fusion</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -23,7 +23,7 @@
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
 	<key>NSAppleEventsUsageDescription</key>
-	<string>Cleaner uses AppleScript only to show the standard administrator password prompt for maintenance tasks you start.</string>
+	<string>Storage Fusion uses AppleScript only to show the standard administrator password prompt for maintenance tasks you start.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSPrincipalClass</key>

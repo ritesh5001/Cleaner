@@ -2,12 +2,13 @@
 import PackageDescription
 
 let package = Package(
-    name: "Cleaner",
+    name: "StorageFusion",
     platforms: [.macOS(.v14)],
     targets: [
         .executableTarget(
-            name: "Cleaner",
-            path: "Sources/Cleaner"
+            name: "StorageFusion",
+            path: "Sources/Cleaner",
+            resources: [.process("Branding")]
         )
     ]
 )
