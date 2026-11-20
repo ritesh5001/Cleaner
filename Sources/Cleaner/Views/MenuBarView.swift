@@ -3,7 +3,6 @@ import AppKit
 
 struct MenuBarView: View {
     @EnvironmentObject var state: AppState
-    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -43,8 +42,7 @@ struct MenuBarView: View {
     }
 
     private func show(_ item: SidebarItem) {
+        MainWindowController.shared.show()
         state.selection = item
-        openWindow(id: "main")
-        NSApp.activate()
     }
 }

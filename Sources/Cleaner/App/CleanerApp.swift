@@ -323,28 +323,29 @@ struct CleanerApp: App {
     private let ai = AISettings.shared
 
     var body: some Scene {
-        Window("Storage Fusion", id: "main") {
-            RootView()
-                .environmentObject(state)
-                .environmentObject(ai)
-                .frame(minWidth: 1000, minHeight: 660)
-        }
-        .commands {
-            CommandGroup(replacing: .newItem) {}
-            CommandMenu("Clean") {
-                Button("Smart Scan") {
-                    state.selection = .smartScan
-                    state.junk.scan()
-                }
-                .keyboardShortcut("r", modifiers: [.command])
-            }
-        }
-
+        // The main window is owned by AppKit (MainWindowController), not a SwiftUI `Window` scene:
+        // SwiftUI destroyed the window on close and re-created it blank when reopened.
         Settings {
             SettingsView()
                 .environmentObject(state)
                 .environmentObject(ai)
                 .frame(width: 680, height: 640)
+        }
+        .commands {
+            CommandGroup(replacing: .newItem) {}
+            CommandGroup(before: .windowList) {
+                Button("Storage Fusion Window") { MainWindowController.shared.show() }
+                    .keyboardShortcut("0", modifiers: [.command])
+                Divider()
+            }
+            CommandMenu("Clean") {
+                Button("Smart Scan") {
+                    MainWindowController.shared.show()
+                    state.selection = .smartScan
+                    state.junk.scan()
+                }
+                .keyboardShortcut("r", modifiers: [.command])
+            }
         }
 
         MenuBarExtra {
@@ -358,6 +359,47 @@ struct CleanerApp: App {
     }
 }
 
+/// Creates the main window once and only hides/shows it afterwards, so its SwiftUI content
+/// is never torn down and rebuilt (the cause of the blank-window glitch).
+@MainActor
+final class MainWindowController: NSObject, NSWindowDelegate {
+    static let shared = MainWindowController()
+    private var window: NSWindow?
+
+    func show() {
+        let w = window ?? makeWindow()
+        if w.isMiniaturized { w.deminiaturize(nil) }
+        w.makeKeyAndOrderFront(nil)
+        NSApp.activate()
+    }
+
+    private func makeWindow() -> NSWindow {
+        let root = RootView()
+            .environmentObject(AppState.shared)
+            .environmentObject(AISettings.shared)
+            .frame(minWidth: 1000, minHeight: 660)
+        let hosting = NSHostingController(rootView: root)
+        hosting.sceneBridgingOptions = [.title, .toolbars]
+        let w = NSWindow(contentViewController: hosting)
+        w.title = "Storage Fusion"
+        w.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
+        w.toolbarStyle = .unified
+        w.isReleasedWhenClosed = false
+        w.delegate = self
+        w.setContentSize(NSSize(width: 1180, height: 760))
+        if !w.setFrameUsingName("StorageFusionMain") { w.center() }
+        w.setFrameAutosaveName("StorageFusionMain")
+        window = w
+        return w
+    }
+
+    /// Closing just hides the window; the app keeps running in the menu bar.
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        sender.orderOut(nil)
+        return false
+    }
+}
+
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Needed when launched as a bare executable (swift run); harmless inside the .app bundle.
@@ -365,7 +407,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if Bundle.main.url(forResource: "AppIcon", withExtension: "icns") == nil {
             NSApp.applicationIconImage = AppBrand.icon
         }
-        NSApp.activate()
+        MainActor.assumeIsolated { MainWindowController.shared.show() }
+    }
+
+    /// Clicking the Dock icon brings the window back.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        MainActor.assumeIsolated { MainWindowController.shared.show() }
+        return true
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
