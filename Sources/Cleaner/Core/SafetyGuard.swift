@@ -47,10 +47,18 @@ enum SafetyGuard {
     }
 
     /// Returns why `url` must not be deleted, or nil when deletion is allowed.
+    /// This user's own cache/temp folders under /var/folders — the only place below /var we allow cleaning.
+    private static let userScratchRoots: [String] = {
+        [Paths.darwinCacheDir, Paths.darwinTempDir]
+            .filter { !$0.isEmpty }
+            .flatMap { [$0, $0.hasPrefix("/private") ? String($0.dropFirst(8)) : "/private" + $0] }
+    }()
+
     static func blockReason(for url: URL) -> String? {
         let p = url.standardizedFileURL.path
-        if protectedExact.contains(p) { return "Protected folder" }
-        if systemPrefixes.contains(where: { p.hasPrefix($0) }) { return "Part of macOS (system-protected)" }
+        if protectedExact.contains(p) || userScratchRoots.contains(p) { return "Protected folder" }
+        let inUserScratch = userScratchRoots.contains { p.hasPrefix($0 + "/") }
+        if !inUserScratch, systemPrefixes.contains(where: { p.hasPrefix($0) }) { return "Part of macOS (system-protected)" }
         if protectedUserTrees.contains(where: { p == $0 || p.hasPrefix($0 + "/") }) {
             return "Protected personal data"
         }

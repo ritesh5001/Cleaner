@@ -10,6 +10,7 @@ struct RootView: View {
                 Section("Clean") {
                     row(.smartScan)
                     row(.largeFiles)
+                    row(.duplicates)
                     row(.spaceLens)
                     row(.uninstaller)
                 }
@@ -34,6 +35,7 @@ struct RootView: View {
         case .dashboard: DashboardView()
         case .smartScan: SmartScanView(scanner: state.junk)
         case .largeFiles: LargeFilesView(finder: state.largeFiles)
+        case .duplicates: DuplicatesView(finder: state.duplicates)
         case .spaceLens: SpaceLensView(model: state.spaceLens)
         case .uninstaller: UninstallerView(model: state.uninstaller)
         case .maintenance: MaintenanceView(model: state.maintenance)

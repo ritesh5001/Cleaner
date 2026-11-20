@@ -80,6 +80,12 @@ enum ContextBuilder {
         s += "- Model: \(MacInfo.model) \(MacInfo.chip), macOS \(MacInfo.osVersion)\n"
         s += "- Disk: \(Fmt.bytes(d.total)) total, \(Fmt.bytes(d.used)) used, \(Fmt.bytes(d.free)) free, \(Fmt.bytes(d.purgeable)) purgeable\n"
         s += "- Memory: \(Fmt.bytes(m.total)) RAM, \(Fmt.bytes(m.used)) used (app \(Fmt.bytes(m.app)), wired \(Fmt.bytes(m.wired)), compressed \(Fmt.bytes(m.compressed))), \(Fmt.bytes(m.cached)) cached files\n"
+        s += "- Memory pressure: \(m.pressureLabel), swap used \(Fmt.bytes(m.swapUsed))\n"
+        let apps = state.maintenance.appMemory
+        if !apps.isEmpty {
+            s += "- Top apps by memory: " + apps.prefix(6).map { "\($0.name) \(Fmt.bytes($0.memory))" }.joined(separator: ", ") + "\n"
+        }
+        for i in state.maintenance.insights { s += "- Health check: \(i.title)\n" }
         s += "- Full Disk Access granted to Cleaner: \(state.hasFullDiskAccess ? "yes" : "no")\n"
         let snaps = state.maintenance.snapshots.count
         if snaps > 0 { s += "- Local Time Machine snapshots: \(snaps)\n" }

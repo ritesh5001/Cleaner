@@ -105,6 +105,13 @@ struct SmartScanView: View {
                     SafetyBadge(safety: cat.rule.safety)
                 }
                 Text(cat.rule.detail).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                if cat.heldTotal > 0 {
+                    Label("+ \(Fmt.bytes(cat.heldTotal)) more in running apps (\(cat.holdingApps.joined(separator: ", "))). Quit them and rescan to include.",
+                          systemImage: "lock.circle")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .lineLimit(2)
+                }
             }
             Spacer()
             Text("\(cat.items.count) items").font(.caption).foregroundStyle(.secondary)

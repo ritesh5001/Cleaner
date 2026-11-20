@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import AppKit
 
 enum Safety: String {
     case safe, review, caution
@@ -23,6 +24,7 @@ enum Safety: String {
 
 enum RuleGroup: String, CaseIterable, Identifiable {
     case system = "System Junk"
+    case apps = "App Caches & Runtimes"
     case developer = "Developer Junk"
     case backups = "Backups, Downloads & Leftovers"
     case trash = "Trash"
@@ -40,6 +42,12 @@ enum RuleMode {
     case extensions([String])
     /// Data folders/plists whose bundle ID belongs to no installed app.
     case orphanedAppData
+    /// Folders with one of these names, found up to `maxDepth` levels below each root.
+    case nestedNamed(Set<String>, maxDepth: Int)
+    /// Regenerable build output (`.next`, `.turbo`…) or reinstallable dependencies (`node_modules`…) in projects.
+    case projectArtifacts(dependencies: Bool)
+    /// VS Code-family extension folders that the editor's own registry no longer references.
+    case obsoleteEditorExtensions
 }
 
 struct CleanupRule: Identifiable {
@@ -54,16 +62,32 @@ struct CleanupRule: Identifiable {
     var permanent = false
     /// Broad rules (e.g. all of ~/Library/Caches) yield to more specific rules that claim the same item.
     var catchAll = false
+    /// Only include items not modified for at least this many days.
+    var minAgeDays = 0
+    /// Skip items belonging to an app that is currently running (owner = folder under Application Support).
+    var skipRunningApps = false
+    /// Skip com.apple.* items (used for macOS-owned temp/cache areas).
+    var skipApplePrefixed = false
     var selectedByDefault: Bool { safety == .safe }
 }
 
 enum CleanupRules {
+    private static let appSupport = "~/Library/Application Support"
+
     static let all: [CleanupRule] = [
         // System
         CleanupRule(id: "user_caches", title: "User Cache Files",
                     detail: "Temporary data apps keep to load faster. Apps rebuild it automatically when needed.",
                     icon: "internaldrive", group: .system, safety: .safe,
                     roots: ["~/Library/Caches"], mode: .children, catchAll: true),
+        CleanupRule(id: "darwin_cache", title: "Hidden macOS App Caches",
+                    detail: "Per-user cache folder macOS keeps in /var/folders (shader, compiler and app caches). Apple's own entries are skipped.",
+                    icon: "eye.slash", group: .system, safety: .safe,
+                    roots: ["$DARWIN_CACHE"], mode: .children, skipApplePrefixed: true),
+        CleanupRule(id: "darwin_temp", title: "Old Temporary Files",
+                    detail: "Temporary files older than 3 days that apps forgot to delete.",
+                    icon: "clock.badge.xmark", group: .system, safety: .safe,
+                    roots: ["$DARWIN_TEMP"], mode: .children, minAgeDays: 3, skipApplePrefixed: true),
         CleanupRule(id: "user_logs", title: "User Logs & Crash Reports",
                     detail: "Diagnostic logs and crash reports written by apps. Only useful when debugging.",
                     icon: "doc.text", group: .system, safety: .safe,
@@ -85,7 +109,40 @@ enum CleanupRules {
                     icon: "arrow.down.app", group: .system, safety: .review,
                     roots: ["/Applications"], mode: .childrenNamed(prefix: "Install macOS")),
 
+        // App caches & runtimes
+        CleanupRule(id: "app_internal_caches", title: "Caches Inside Apps",
+                    detail: "Browser-engine caches that Electron/Chromium apps (VS Code, Slack, Discord, Claude, Chrome…) keep inside Application Support. Caches of running apps are skipped — quit them to include.",
+                    icon: "square.stack.3d.down.right", group: .apps, safety: .safe,
+                    roots: [appSupport],
+                    mode: .nestedNamed(["Cache", "Code Cache", "GPUCache", "DawnCache", "DawnGraphiteCache",
+                                        "DawnWebGPUCache", "GraphiteDawnCache", "GrShaderCache", "ShaderCache",
+                                        "CachedData", "CachedExtensionVSIXs", "Crashpad"], maxDepth: 4),
+                    skipRunningApps: true),
+        CleanupRule(id: "editor_extensions", title: "Old Editor Extension Versions",
+                    detail: "Previous versions of VS Code / Cursor / Windsurf extensions that the editor no longer uses.",
+                    icon: "puzzlepiece", group: .apps, safety: .safe,
+                    roots: ["~/.vscode/extensions", "~/.vscode-insiders/extensions", "~/.cursor/extensions",
+                            "~/.windsurf/extensions", "~/.vscode-oss/extensions"],
+                    mode: .obsoleteEditorExtensions),
+        CleanupRule(id: "ai_vm_images", title: "AI App VM Images",
+                    detail: "Virtual-machine images AI desktop apps download for sandboxed features (e.g. Claude Desktop). Re-downloaded the next time you use that feature. Skipped while the app is running.",
+                    icon: "cpu", group: .apps, safety: .caution,
+                    roots: ["\(appSupport)/Claude/vm_bundles"], mode: .root, skipRunningApps: true),
+        CleanupRule(id: "abandoned_installs", title: "Interrupted Runtime Installs",
+                    detail: "Half-finished runtime downloads left behind when an install was interrupted.",
+                    icon: "arrow.down.circle.dotted", group: .apps, safety: .safe,
+                    roots: ["~/.cache/codex-runtimes"], mode: .childrenNamed(prefix: "codex-runtime-install-"),
+                    minAgeDays: 1),
+
         // Developer
+        CleanupRule(id: "project_build", title: "Project Build Output",
+                    detail: "Regenerable build folders in your projects (.next, .turbo, .nuxt, .svelte-kit, .parcel-cache, .angular, .expo). Rebuilt on the next build or dev run.",
+                    icon: "hammer.fill", group: .developer, safety: .safe,
+                    roots: ["~"], mode: .projectArtifacts(dependencies: false)),
+        CleanupRule(id: "project_deps", title: "Project Dependencies",
+                    detail: "node_modules, Python virtualenvs, CocoaPods, Rust target and Gradle folders. Reinstall with npm install / pip / pod install. Best for projects you aren't working on.",
+                    icon: "shippingbox.and.arrow.backward", group: .developer, safety: .review,
+                    roots: ["~"], mode: .projectArtifacts(dependencies: true)),
         CleanupRule(id: "xcode_derived", title: "Xcode DerivedData",
                     detail: "Build products and indexes. Xcode regenerates them on the next build.",
                     icon: "hammer", group: .developer, safety: .safe,
@@ -110,12 +167,13 @@ enum CleanupRules {
                     icon: "archivebox", group: .developer, safety: .caution,
                     roots: ["~/Library/Developer/Xcode/Archives"], mode: .children),
         CleanupRule(id: "package_caches", title: "Package Manager Caches",
-                    detail: "Download caches for Homebrew, npm, Yarn, pip, Gradle, CocoaPods, Cargo, Go, Bun and SwiftPM. Re-downloaded on demand.",
+                    detail: "Download caches for npm/npx, Yarn, pnpm, Bun, pip, uv, Gradle, CocoaPods, Cargo, Go, Homebrew, SwiftPM and Prisma. Re-downloaded on demand.",
                     icon: "shippingbox", group: .developer, safety: .safe,
-                    roots: ["~/Library/Caches/Homebrew", "~/.npm/_cacache", "~/Library/Caches/Yarn",
-                            "~/Library/Caches/pip", "~/.gradle/caches", "~/Library/Caches/CocoaPods",
+                    roots: ["~/Library/Caches/Homebrew", "~/.npm/_cacache", "~/.npm/_npx", "~/Library/Caches/Yarn",
+                            "~/Library/Caches/pip", "~/.cache/uv", "~/.gradle/caches", "~/Library/Caches/CocoaPods",
                             "~/.cargo/registry/cache", "~/Library/Caches/go-build", "~/.bun/install/cache",
-                            "~/Library/Caches/org.swift.swiftpm", "~/Library/Caches/pnpm"], mode: .root),
+                            "~/Library/Caches/org.swift.swiftpm", "~/Library/Caches/pnpm", "~/.cache/prisma",
+                            "~/Library/Caches/node-gyp", "~/Library/Caches/typescript"], mode: .root),
 
         // Backups, downloads & leftovers
         CleanupRule(id: "ios_backups", title: "iPhone & iPad Backups",
@@ -132,9 +190,9 @@ enum CleanupRules {
                     icon: "paperclip", group: .backups, safety: .review,
                     roots: ["~/Library/Containers/com.apple.mail/Data/Library/Mail Downloads"], mode: .children),
         CleanupRule(id: "download_installers", title: "Installers in Downloads",
-                    detail: "Disk images and installer packages. Usually not needed after the app is installed.",
+                    detail: "Disk images, installer packages and Android app bundles. Usually not needed after installing or uploading.",
                     icon: "externaldrive.badge.plus", group: .backups, safety: .review,
-                    roots: ["~/Downloads"], mode: .extensions(["dmg", "pkg", "mpkg", "iso", "xip"])),
+                    roots: ["~/Downloads"], mode: .extensions(["dmg", "pkg", "mpkg", "iso", "xip", "aab", "apk", "ipa"])),
         CleanupRule(id: "orphans", title: "Leftovers of Removed Apps",
                     detail: "Containers, caches and preferences whose app is no longer installed.",
                     icon: "puzzlepiece.extension", group: .backups, safety: .review,
@@ -152,8 +210,35 @@ enum CleanupRules {
 
 // MARK: - Evaluation (runs off the main thread)
 
+struct ScanContext {
+    var installedBundleIDs: Set<String>
+    var excluded: [String]
+    /// Lower-cased names of running GUI apps (localized name + bundle file name).
+    var runningAppNames: Set<String>
+
+    @MainActor
+    static func current() -> ScanContext {
+        var names = Set<String>()
+        for app in NSWorkspace.shared.runningApplications where app.activationPolicy == .regular {
+            if let n = app.localizedName { names.insert(n.lowercased()) }
+            if let u = app.bundleURL { names.insert(u.deletingPathExtension().lastPathComponent.lowercased()) }
+        }
+        return ScanContext(installedBundleIDs: AppCatalog.installedBundleIDs(),
+                           excluded: SafetyGuard.excludedPaths, runningAppNames: names)
+    }
+
+    func isOwnerRunning(_ url: URL) -> Bool {
+        let comps = url.pathComponents
+        guard let i = comps.firstIndex(of: "Application Support"), i + 1 < comps.count else { return false }
+        let owner = comps[i + 1].lowercased()
+        return runningAppNames.contains { name in
+            name == owner || name.hasPrefix(owner + " ") || name.hasSuffix(" " + owner) || owner.hasPrefix(name)
+        }
+    }
+}
+
 enum RuleEvaluator {
-    static func evaluate(_ rule: CleanupRule, installedBundleIDs: Set<String>, excluded: [String]) -> CategoryResult? {
+    static func evaluate(_ rule: CleanupRule, context: ScanContext) -> CategoryResult? {
         var urls: [URL] = []
         for root in rule.roots.map(Paths.expand) {
             guard FileManager.default.fileExists(atPath: root.path) else { continue }
@@ -167,20 +252,125 @@ enum RuleEvaluator {
             case .extensions(let exts):
                 urls += Paths.children(of: root).filter { exts.contains($0.pathExtension.lowercased()) }
             case .orphanedAppData:
-                urls += Orphans.find(in: root, installed: installedBundleIDs)
+                urls += Orphans.find(in: root, installed: context.installedBundleIDs)
+            case .nestedNamed(let names, let depth):
+                urls += DeepFinder.nested(in: root, names: names, maxDepth: depth)
+            case .projectArtifacts(let deps):
+                urls += DeepFinder.projectArtifacts(in: root, dependencies: deps)
+            case .obsoleteEditorExtensions:
+                urls += DeepFinder.obsoleteExtensions(in: root)
             }
             if Task.isCancelled { return nil }
         }
 
+        let cutoff = rule.minAgeDays > 0 ? Date().addingTimeInterval(-Double(rule.minAgeDays) * 86_400) : nil
+        var held: [ScanItem] = []
         let items: [ScanItem] = urls.compactMap { url in
-            guard !SafetyGuard.isExcluded(url, list: excluded), SafetyGuard.blockReason(for: url) == nil else { return nil }
+            if rule.skipApplePrefixed, url.lastPathComponent.hasPrefix("com.apple.") { return nil }
+            if rule.skipRunningApps, context.isOwnerRunning(url) {
+                let size = FileSizer.size(of: url)
+                if size > 0 { held.append(ScanItem(url: url, size: size, modified: nil)) }
+                return nil
+            }
+            guard !SafetyGuard.isExcluded(url, list: context.excluded), SafetyGuard.blockReason(for: url) == nil else { return nil }
+            let modified = Paths.modified(url)
+            if let cutoff, let modified, modified > cutoff { return nil }
             let size = FileSizer.size(of: url)
             guard size > 0 else { return nil }
-            return ScanItem(url: url, size: size, modified: Paths.modified(url))
+            return ScanItem(url: url, size: size, modified: modified)
         }
         .sorted { $0.size > $1.size }
 
-        return items.isEmpty ? nil : CategoryResult(rule: rule, items: items)
+        let result = CategoryResult(rule: rule, items: items, heldByRunningApps: held.sorted { $0.size > $1.size })
+        return result.isEmpty ? nil : result
+    }
+}
+
+/// Recursive finders for junk that hides deeper than one level.
+enum DeepFinder {
+    /// Never look inside these (sync engines can hold not-yet-uploaded files in folders named "Cache").
+    static let protectedComponents: Set<String> = [
+        "DriveFS", "Dropbox", "OneDrive", "Box", "CloudDocs", "MobileSync", "Google Drive", "pCloud",
+        ".tmp.driveupload", ".tmp.drivedownload",
+    ]
+
+    static func nested(in root: URL, names: Set<String>, maxDepth: Int) -> [URL] {
+        var out: [URL] = []
+        DirWalker.walk(root, keys: [.isPackageKey]) { u, level, v in
+            let name = u.lastPathComponent
+            guard v.isDirectory == true, v.isPackage != true else { return .skip }
+            if protectedComponents.contains(name) || name.hasPrefix("com.apple.") { return .skip }
+            if names.contains(name) { out.append(u); return .skip }
+            return level >= maxDepth ? .skip : .descend
+        }
+        return out
+    }
+
+    private static let buildOutput: Set<String> = [
+        ".next", ".turbo", ".parcel-cache", ".nuxt", ".svelte-kit", ".angular", ".expo", ".docusaurus",
+    ]
+
+    /// Folder name → files that must exist next to it (or inside it, for virtualenvs) to confirm what it is.
+    private static let dependencyMarkers: [String: (siblings: [String], inside: [String])] = [
+        "node_modules": (["package.json"], []),
+        ".venv": ([], ["pyvenv.cfg"]),
+        "venv": ([], ["pyvenv.cfg"]),
+        "Pods": (["Podfile"], []),
+        "target": (["Cargo.toml", "pom.xml"], []),
+        ".gradle": (["build.gradle", "build.gradle.kts", "settings.gradle", "settings.gradle.kts"], []),
+    ]
+
+    private static let skippedTopLevel: Set<String> = ["Library", "Applications", "Pictures", "Music", "Movies", "Public"]
+
+    static func projectArtifacts(in root: URL, dependencies: Bool) -> [URL] {
+        let fm = FileManager.default
+        var out: [URL] = []
+        DirWalker.walk(root, keys: [.isPackageKey]) { u, level, v in
+            guard v.isDirectory == true, v.isPackage != true else { return .skip }
+            let name = u.lastPathComponent
+            // Hidden folders directly in home are tool installs (~/.claude, ~/.vscode…), not projects.
+            if level == 1, name.hasPrefix(".") || skippedTopLevel.contains(name) { return .skip }
+            if level > 8 || protectedComponents.contains(name) { return .skip }
+
+            if buildOutput.contains(name) {
+                if !dependencies { out.append(u) }
+                return .skip
+            }
+            if let marker = dependencyMarkers[name] {
+                let parent = u.deletingLastPathComponent()
+                let confirmed = marker.siblings.contains { fm.fileExists(atPath: parent.appendingPathComponent($0).path) }
+                    || marker.inside.contains { fm.fileExists(atPath: u.appendingPathComponent($0).path) }
+                if confirmed {
+                    if dependencies { out.append(u) }
+                    return .skip
+                }
+            }
+            // Don't wander into VCS metadata or other hidden folders inside projects.
+            return name.hasPrefix(".") ? .skip : .descend
+        }
+        return out
+    }
+
+    static func obsoleteExtensions(in root: URL) -> [URL] {
+        let dirs = Paths.children(of: root).filter { !$0.lastPathComponent.hasPrefix(".") && Paths.isDirectory($0) }
+        let registry = root.appendingPathComponent("extensions.json")
+        if let data = try? Data(contentsOf: registry),
+           let list = (try? JSONSerialization.jsonObject(with: data)) as? [[String: Any]], !list.isEmpty {
+            let active = Set(list.compactMap { entry -> String? in
+                if let rel = entry["relativeLocation"] as? String { return rel }
+                if let loc = entry["location"] as? [String: Any], let p = loc["path"] as? String {
+                    return URL(fileURLWithPath: p).lastPathComponent
+                }
+                return nil
+            })
+            guard !active.isEmpty else { return [] }
+            return dirs.filter { !active.contains($0.lastPathComponent) }
+        }
+        // Fallback: the editor's own list of folders it has marked obsolete.
+        let obsoleteFile = root.appendingPathComponent(".obsolete")
+        guard let data = try? Data(contentsOf: obsoleteFile),
+              let map = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return [] }
+        return dirs.filter { map[$0.lastPathComponent] != nil }
     }
 }
 

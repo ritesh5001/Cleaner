@@ -24,14 +24,13 @@ final class JunkScanner: ObservableObject {
         selected = []
         lastReport = nil
         status = "Preparing…"
-        let excluded = SafetyGuard.excludedPaths
+        let context = ScanContext.current()
 
         scanTask = Task {
-            let installed = await Task.detached { AppCatalog.installedBundleIDs() }.value
             var collected: [CategoryResult] = []
             await withTaskGroup(of: CategoryResult?.self) { group in
                 for rule in CleanupRules.all {
-                    group.addTask { RuleEvaluator.evaluate(rule, installedBundleIDs: installed, excluded: excluded) }
+                    group.addTask { RuleEvaluator.evaluate(rule, context: context) }
                 }
                 for await result in group {
                     guard let result else { continue }
@@ -85,7 +84,7 @@ final class JunkScanner: ObservableObject {
         let removed = Set(report.removed)
         results = results
             .map { var r = $0; r.items.removeAll { removed.contains($0.url) }; return r }
-            .filter { !$0.items.isEmpty }
+            .filter { !$0.isEmpty }
         selected.subtract(removed)
         lastReport = report
     }
@@ -102,7 +101,7 @@ final class JunkScanner: ObservableObject {
                 c.items.removeAll { claimed.contains($0.url) }
                 return c
             }
-            .filter { !$0.items.isEmpty }
+            .filter { !$0.isEmpty }
             .sorted { (order[$0.rule.id] ?? 0) < (order[$1.rule.id] ?? 0) }
     }
 }

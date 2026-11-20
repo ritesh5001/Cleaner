@@ -16,10 +16,13 @@ struct DashboardView: View {
                     Card { memory }
                 }
 
+                InsightsList(model: state.maintenance)
+
                 Text("What do you want to do?").font(.headline)
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 12)], spacing: 12) {
                     ActionTile(item: .smartScan, text: "Find caches, logs, developer junk, old installers and leftovers.")
                     ActionTile(item: .largeFiles, text: "Find big and forgotten files across your home folder.")
+                    ActionTile(item: .duplicates, text: "Find identical files and keep just one copy.")
                     ActionTile(item: .spaceLens, text: "See exactly which folders take up your disk.")
                     ActionTile(item: .uninstaller, text: "Remove apps completely, including their hidden files.")
                     ActionTile(item: .maintenance, text: "Free memory, thin snapshots, flush DNS, rebuild indexes.")
@@ -47,6 +50,7 @@ struct DashboardView: View {
             }
             .padding(24)
         }
+        .onAppear { state.maintenance.checkHealth(memory: state.memory) }
     }
 
     @ViewBuilder

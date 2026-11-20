@@ -11,8 +11,20 @@ struct ScanItem: Identifiable, Hashable {
 struct CategoryResult: Identifiable {
     let rule: CleanupRule
     var items: [ScanItem]
+    /// Items this rule would clean but skipped because their app is running.
+    var heldByRunningApps: [ScanItem] = []
     var id: String { rule.id }
     var total: Int64 { items.reduce(0) { $0 + $1.size } }
+    var heldTotal: Int64 { heldByRunningApps.reduce(0) { $0 + $1.size } }
+    var isEmpty: Bool { items.isEmpty && heldByRunningApps.isEmpty }
+    /// Names of the running apps holding `heldByRunningApps`.
+    var holdingApps: [String] {
+        Array(Set(heldByRunningApps.compactMap { item -> String? in
+            let c = item.url.pathComponents
+            guard let i = c.firstIndex(of: "Application Support"), i + 1 < c.count else { return nil }
+            return c[i + 1]
+        })).sorted()
+    }
 }
 
 struct CleanTarget {

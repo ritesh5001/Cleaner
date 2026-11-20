@@ -34,6 +34,18 @@ struct MemoryInfo {
     var compressed: Int64 = 0
     var cached: Int64 = 0
     var free: Int64 = 0
+    var swapUsed: Int64 = 0
+    var swapTotal: Int64 = 0
+    /// kern.memorystatus_vm_pressure_level: 1 normal, 2 warning, 4 critical.
+    var pressureLevel = 1
+
+    var pressureLabel: String {
+        switch pressureLevel {
+        case 4: "Critical"
+        case 2: "Warning"
+        default: "Normal"
+        }
+    }
 
     var used: Int64 { app + wired + compressed }
     func fraction(_ v: Int64) -> Double { total > 0 ? min(1, Double(v) / Double(total)) : 0 }
@@ -54,6 +66,18 @@ struct MemoryInfo {
         info.compressed = Int64(stats.compressor_page_count) * page
         info.cached = (Int64(stats.external_page_count) + Int64(stats.purgeable_count)) * page
         info.free = Int64(stats.free_count) * page
+
+        var swap = xsw_usage()
+        var swapSize = MemoryLayout<xsw_usage>.size
+        if sysctlbyname("vm.swapusage", &swap, &swapSize, nil, 0) == 0 {
+            info.swapUsed = Int64(swap.xsu_used)
+            info.swapTotal = Int64(swap.xsu_total)
+        }
+        var level: Int32 = 0
+        var levelSize = MemoryLayout<Int32>.size
+        if sysctlbyname("kern.memorystatus_vm_pressure_level", &level, &levelSize, nil, 0) == 0, level > 0 {
+            info.pressureLevel = Int(level)
+        }
         return info
     }
 }

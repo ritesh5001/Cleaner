@@ -77,44 +77,36 @@ enum LargeFileSearch {
             .isRegularFileKey, .isPackageKey, .isSymbolicLinkKey, .totalFileAllocatedSizeKey,
             .fileAllocatedSizeKey, .contentModificationDateKey,
         ]
-        let keySet = Set(keys)
-        guard let e = FileManager.default.enumerator(
-            at: root, includingPropertiesForKeys: keys, options: [], errorHandler: { _, _ in true }
-        ) else { return [] }
-
         let library = Paths.home.appendingPathComponent("Library").path
         let trash = Paths.home.appendingPathComponent(".Trash").path
         let cutoff = olderThanDays > 0 ? Date().addingTimeInterval(-Double(olderThanDays) * 86_400) : nil
 
         var out: [LargeFile] = []
         var n = 0
-        while let url = e.nextObject() as? URL {
+        DirWalker.walk(root, keys: keys) { url, _, v in
             n += 1
-            if n % 4000 == 0 {
-                if Task.isCancelled { break }
-                progress(n)
-            }
+            if n % 4000 == 0 { progress(n) }
             let p = url.path
             if (!includeLibrary && p == library) || p == trash || FileSizer.skipPaths.contains(p)
-                || SafetyGuard.isExcluded(url, list: excluded) {
-                e.skipDescendants()
-                continue
+                || SafetyGuard.isExcluded(url, list: excluded) || v.isSymbolicLink == true {
+                return .skip
             }
-            guard let v = try? url.resourceValues(forKeys: keySet), v.isSymbolicLink != true else { continue }
 
             let size: Int64
             if v.isPackage == true {
                 // Treat bundles (.app, .photoslibrary, …) as one item.
-                e.skipDescendants()
                 size = FileSizer.size(of: url)
+            } else if v.isDirectory == true {
+                return .descend
             } else if v.isRegularFile == true {
                 size = Int64(v.totalFileAllocatedSize ?? v.fileAllocatedSize ?? 0)
             } else {
-                continue
+                return .skip
             }
-            guard size >= minBytes else { continue }
-            if let cutoff, let m = v.contentModificationDate, m > cutoff { continue }
-            out.append(LargeFile(url: url, size: size, modified: v.contentModificationDate))
+            if size >= minBytes, cutoff == nil || (v.contentModificationDate ?? .distantPast) <= cutoff! {
+                out.append(LargeFile(url: url, size: size, modified: v.contentModificationDate))
+            }
+            return .skip
         }
         progress(n)
         return Array(out.sorted { $0.size > $1.size }.prefix(1000))
