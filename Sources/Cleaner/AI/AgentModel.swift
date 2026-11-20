@@ -184,7 +184,7 @@ final class AgentModel: ObservableObject {
                 case "safe": .safe
                 case "caution": .caution
                 default: .review } }()
-            // Never let the AI rate something safer than Cleaner's own rules do.
+            // Never let the AI rate something safer than Storage Fusion's own rules do.
             let risk = [aiRisk, c.safety].max { $0.rank < $1.rank } ?? aiRisk
             if !actions.contains(where: { $0.id == id }) {
                 actions.append(AgentAction(candidate: c, reason: a["reason"] as? String ?? "", risk: risk, selected: risk != .caution))

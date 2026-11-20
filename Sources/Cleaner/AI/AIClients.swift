@@ -63,7 +63,7 @@ enum AIProviderKind: String, CaseIterable, Identifiable {
     var setupHint: String {
         switch self {
         case .claudeCode:
-            "Uses your Claude Pro/Max plan through your own Claude Code login: Cleaner runs `claude -p` on this Mac with tools and MCP servers turned off. Your login never touches Cleaner, and usage counts toward your plan's limits. Install Claude Code, then run `claude` once in Terminal to sign in."
+            "Uses your Claude Pro/Max plan through your own Claude Code login: Storage Fusion runs `claude -p` on this Mac with tools and MCP servers turned off. Your login never touches Storage Fusion, and usage counts toward your plan's limits. Install Claude Code, then run `claude` once in Terminal to sign in."
         case .geminiCLI:
             "Uses your Google account through your own Gemini CLI login. Install it with `npm install -g @google/gemini-cli`, then run `gemini` once to sign in."
         case .claude, .gemini:

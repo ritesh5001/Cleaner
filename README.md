@@ -9,6 +9,7 @@ See [docs/RESEARCH.md](docs/RESEARCH.md) for the market research and the full ro
 Requires macOS 14+ and either the Xcode Command Line Tools or Xcode.
 
 ```bash
+./scripts/make-dmg.sh           # builds dist/Cleaner-<version>.dmg (drag-to-install)
 ./scripts/build-app.sh          # builds build/Cleaner.app
 open build/Cleaner.app
 

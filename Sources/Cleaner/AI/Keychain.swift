@@ -20,7 +20,7 @@ enum Keychain {
         var add = query
         add[kSecValueData as String] = Data(value.utf8)
         add[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlocked
-        add[kSecAttrLabel as String] = "Cleaner AI key (\(account))"
+        add[kSecAttrLabel as String] = "Storage Fusion AI key (\(account))"
         return SecItemAdd(add as CFDictionary, nil) == errSecSuccess
     }
 

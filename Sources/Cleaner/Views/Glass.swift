@@ -56,36 +56,26 @@ struct GlassGroup<Content: View>: View {
     }
 }
 
-/// Soft, slowly drifting color field behind the content so glass has something to refract.
+/// Soft color field behind the content so glass has something to refract.
+/// Static on purpose — an animated background forced a layout pass every frame.
 struct AppBackground: View {
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1 / 15)) { context in
-            let t = context.date.timeIntervalSinceReferenceDate / 18
-            GeometryReader { geo in
-                let w = geo.size.width, h = geo.size.height
-                ZStack {
-                    Color(nsColor: .windowBackgroundColor)
-                    blob(.indigo, size: max(w, h) * 0.75)
-                        .position(x: w * (0.15 + 0.08 * sin(t)), y: h * (0.12 + 0.06 * cos(t * 0.8)))
-                    blob(.teal, size: max(w, h) * 0.6)
-                        .position(x: w * (0.9 + 0.06 * cos(t * 0.7)), y: h * (0.3 + 0.08 * sin(t * 0.9)))
-                    blob(.purple, size: max(w, h) * 0.7)
-                        .position(x: w * (0.55 + 0.1 * sin(t * 0.6)), y: h * (1.0 + 0.05 * cos(t)))
-                }
-            }
+        ZStack {
+            Color(nsColor: .windowBackgroundColor)
+            RadialGradient(colors: [Color.indigo.opacity(scheme == .dark ? 0.38 : 0.20), .clear],
+                           center: UnitPoint(x: 0.12, y: 0.08), startRadius: 0, endRadius: 650)
+            RadialGradient(colors: [Color.teal.opacity(scheme == .dark ? 0.30 : 0.16), .clear],
+                           center: UnitPoint(x: 0.95, y: 0.3), startRadius: 0, endRadius: 520)
+            RadialGradient(colors: [Color.purple.opacity(scheme == .dark ? 0.34 : 0.18), .clear],
+                           center: UnitPoint(x: 0.55, y: 1.05), startRadius: 0, endRadius: 600)
         }
+        .drawingGroup()
         .ignoresSafeArea()
+        .allowsHitTesting(false)
     }
 
-    private func blob(_ color: Color, size: CGFloat) -> some View {
-        Circle()
-            .fill(RadialGradient(colors: [color.opacity(scheme == .dark ? 0.38 : 0.22), .clear],
-                                 center: .center, startRadius: 0, endRadius: size / 2))
-            .frame(width: size, height: size)
-            .blur(radius: 40)
-    }
 }
 
 /// Large rounded numerals used for headline stats.

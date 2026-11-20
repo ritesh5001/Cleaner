@@ -99,7 +99,7 @@ final class AppOwnerResolver: @unchecked Sendable {
         "go-build": ("Go", nil, "terminal"),
         "org.swift.swiftpm": ("Swift Package Manager", nil, "swift"),
         "claude-cli-nodejs": ("Claude Code", nil, "terminal"),
-        "cleaner-build": ("Cleaner (this app's build files)", nil, "sparkles"),
+        "cleaner-build": ("Storage Fusion (this app's build files)", nil, "sparkles"),
         "geoservices": ("macOS Maps & Location", nil, "map"),
         "jetbrains": ("JetBrains IDEs", nil, "hammer"),
         "clang": ("Xcode compiler (clang)", nil, "hammer"),

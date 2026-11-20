@@ -42,6 +42,8 @@ enum SidebarItem: String, CaseIterable, Identifiable, Hashable {
 
 @MainActor
 final class AppState: ObservableObject {
+    static let shared = AppState()
+
     @Published var selection: SidebarItem? = .dashboard
     @Published private(set) var disk = DiskInfo.current()
     @Published private(set) var memory = MemoryInfo.current()

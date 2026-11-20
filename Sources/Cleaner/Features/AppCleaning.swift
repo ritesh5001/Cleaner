@@ -102,7 +102,7 @@ enum DeleteMethod: String, CaseIterable, Identifiable {
         switch self {
         case .trash: "Recoverable until you empty the Trash. Space is freed after emptying it."
         case .permanent: "Frees space immediately. Can't be undone."
-        case .archive: "Compresses everything into ~/Documents/Cleaner Backups first, then deletes the originals."
+        case .archive: "Compresses everything into ~/Documents/Storage Fusion Backups first, then deletes the originals."
         }
     }
 
@@ -118,7 +118,7 @@ enum DeleteMethod: String, CaseIterable, Identifiable {
 enum AppCleaner {
     static var backupRoot: URL {
         if let override = ProcessInfo.processInfo.environment["CLEANER_BACKUP_ROOT"] { return URL(fileURLWithPath: override) }
-        return Paths.home.appendingPathComponent("Documents/Cleaner Backups", isDirectory: true)
+        return Paths.home.appendingPathComponent("Documents/Storage Fusion Backups", isDirectory: true)
     }
 
     /// Running instances of an app (by bundle location).

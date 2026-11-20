@@ -7,7 +7,7 @@ struct MenuBarView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Cleaner").font(.headline)
+            Text("Storage Fusion").font(.headline)
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
@@ -27,14 +27,14 @@ struct MenuBarView: View {
             }
 
             Divider()
-            Button("Open Cleaner") { show(.dashboard) }
+            Button("Open Storage Fusion") { show(.dashboard) }
             Button("Run Smart Scan") {
                 show(.smartScan)
                 state.junk.scan()
             }
             Button("Ask AI") { show(.assistant) }
             Divider()
-            Button("Quit Cleaner") { NSApp.terminate(nil) }
+            Button("Quit Storage Fusion") { NSApp.terminate(nil) }
         }
         .buttonStyle(.borderless)
         .padding(14)

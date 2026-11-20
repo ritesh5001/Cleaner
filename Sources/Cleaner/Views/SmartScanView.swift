@@ -48,7 +48,7 @@ struct SmartScanView: View {
                             Label(identifying ? "Identifying…" : "Identify Apps with AI (\(unidentified.count))", systemImage: "questionmark.app")
                         }
                         .disabled(identifying || !ai.isReady)
-                        .help(ai.isReady ? "Ask \(ai.activeProvider.shortName) which app created the folders Cleaner couldn't match"
+                        .help(ai.isReady ? "Ask \(ai.activeProvider.shortName) which app created the folders Storage Fusion couldn't match"
                                          : "Connect an AI provider in Settings first")
                     }
                     if !scanner.results.isEmpty {

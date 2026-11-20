@@ -95,7 +95,7 @@ struct ExplorerView: View {
                 }
             }
             if let r = model.root, r.url.path == "/", let measured = r.size, !(r.isLoading), state.disk.used > measured {
-                Label("Cleaner can see \(Fmt.bytes(measured)) of the \(Fmt.bytes(state.disk.used)) in use. The other \(Fmt.bytes(state.disk.used - measured)) is in places macOS hides\(state.hasFullDiskAccess ? "" : " (grant Full Disk Access to see more)"): the Trash, swap, local snapshots, the Preboot/VM volumes and other users' files. Items you moved to the Trash still use space until you empty it.",
+                Label("Storage Fusion can see \(Fmt.bytes(measured)) of the \(Fmt.bytes(state.disk.used)) in use. The other \(Fmt.bytes(state.disk.used - measured)) is in places macOS hides\(state.hasFullDiskAccess ? "" : " (grant Full Disk Access to see more)"): the Trash, swap, local snapshots, the Preboot/VM volumes and other users' files. Items you moved to the Trash still use space until you empty it.",
                       systemImage: "eye.slash")
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

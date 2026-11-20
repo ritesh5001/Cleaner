@@ -99,8 +99,12 @@ final class CleanupLog: @unchecked Sendable {
     let fileURL: URL
 
     private init() {
-        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Cleaner", isDirectory: true)
+        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        let dir = support.appendingPathComponent("Storage Fusion", isDirectory: true)
+        let old = support.appendingPathComponent("Cleaner", isDirectory: true)
+        if !FileManager.default.fileExists(atPath: dir.path), FileManager.default.fileExists(atPath: old.path) {
+            try? FileManager.default.moveItem(at: old, to: dir)   // keep history from the old app name
+        }
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         fileURL = dir.appendingPathComponent("history.log")
     }

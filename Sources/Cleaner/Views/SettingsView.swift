@@ -30,7 +30,7 @@ struct SettingsView: View {
 
             Section("Privacy") {
                 Toggle("When explaining a folder, include the names of items inside it", isOn: $ai.shareFolderListings)
-                Text("Cleaner sends paths (your home folder appears as ~), sizes and dates. It never uploads the contents of your files.")
+                Text("Storage Fusion sends paths (your home folder appears as ~), sizes and dates. It never uploads the contents of your files.")
                     .font(.caption).foregroundStyle(.secondary)
             }
 
@@ -66,7 +66,7 @@ struct SettingsView: View {
                     Spacer()
                     Button("Open Privacy Settings") { FullDiskAccess.openSettings() }
                 }
-                Text("Full Disk Access lets Cleaner see Mail, Safari, Trash, iOS backups and other protected app data. macOS system files stay read-only either way (System Integrity Protection).")
+                Text("Full Disk Access lets Storage Fusion see Mail, Safari, Trash, iOS backups and other protected app data. macOS system files stay read-only either way (System Integrity Protection).")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }

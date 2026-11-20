@@ -88,7 +88,7 @@ enum DataExplainer {
         let app = owner?.name ?? "the app"
         if let reason = SafetyGuard.blockReason(for: url) {
             return .init(what: "Protected data (\(reason.lowercased())).", usedFor: "Information that can't be recreated.",
-                         ifDeleted: "Cleaner won't delete it — losing it could be permanent.", verdict: "keep")
+                         ifDeleted: "Storage Fusion won't delete it — losing it could be permanent.", verdict: "keep")
         }
         if let s = specific[url.lastPathComponent.lowercased()] { return s }
         let gone = owner?.installed == false

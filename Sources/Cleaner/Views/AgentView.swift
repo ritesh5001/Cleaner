@@ -34,7 +34,7 @@ struct AgentView: View {
             }
         } message: {
             if let id = confirmTurn, let plan = model.turns.first(where: { $0.id == id })?.plan {
-                Text("\(plan.actions.filter(\.selected).count) item(s), \(Fmt.bytes(plan.selectedSize)), go to the Trash\(plan.tasks.isEmpty ? "" : " and \(plan.tasks.count) maintenance task(s) run"). Every item is re-checked by Cleaner's safety rules first.")
+                Text("\(plan.actions.filter(\.selected).count) item(s), \(Fmt.bytes(plan.selectedSize)), go to the Trash\(plan.tasks.isEmpty ? "" : " and \(plan.tasks.count) maintenance task(s) run"). Every item is re-checked by Storage Fusion's safety rules first.")
             }
         }
     }
@@ -83,7 +83,7 @@ struct AgentView: View {
                 SymbolTile(symbol: "wand.and.sparkles", color: .purple, size: 52)
                 VStack(alignment: .leading, spacing: 4) {
                     Text("What should I clean?").font(.title2.weight(.bold))
-                    Text("I can only pick from items Cleaner found on this Mac, every choice passes its safety rules, and nothing happens until you press Clean.")
+                    Text("I can only pick from items Storage Fusion found on this Mac, every choice passes its safety rules, and nothing happens until you press Clean.")
                         .foregroundStyle(.secondary)
                 }
             }

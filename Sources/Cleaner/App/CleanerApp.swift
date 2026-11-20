@@ -124,7 +124,7 @@ enum CLI {
             return c
         }.filter { !$0.isEmpty }
 
-        print("Cleaner dry-run scan — Full Disk Access: \(FullDiskAccess.isGranted ? "yes" : "no")")
+        print("Storage Fusion dry-run scan — Full Disk Access: \(FullDiskAccess.isGranted ? "yes" : "no")")
         print("Disk: \(Fmt.bytes(DiskInfo.current().used)) used / \(Fmt.bytes(DiskInfo.current().total))\n")
         var total: Int64 = 0
         for r in results {
@@ -303,11 +303,13 @@ enum CLI {
 
 struct CleanerApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @StateObject private var state = AppState()
-    @StateObject private var ai = AISettings.shared
+    // Not observed here on purpose: observing at the App level re-evaluated the whole scene
+    // (window, menus, menu bar) on every published change, which caused layout loops/crashes.
+    private let state = AppState.shared
+    private let ai = AISettings.shared
 
     var body: some Scene {
-        Window("Cleaner", id: "main") {
+        Window("Storage Fusion", id: "main") {
             RootView()
                 .environmentObject(state)
                 .environmentObject(ai)
@@ -331,7 +333,7 @@ struct CleanerApp: App {
                 .frame(width: 680, height: 640)
         }
 
-        MenuBarExtra("Cleaner", systemImage: "sparkles") {
+        MenuBarExtra("Storage Fusion", systemImage: "sparkles") {
             MenuBarView()
                 .environmentObject(state)
         }

@@ -42,7 +42,7 @@ struct DashboardView: View {
 
                 HStack(alignment: .top, spacing: 16) {
                     Card {
-                        Label("Cleaned with Cleaner", systemImage: "leaf").font(.headline)
+                        Label("Cleaned with Storage Fusion", systemImage: "leaf").font(.headline)
                         Text(Fmt.bytes(CleanupLog.lifetimeCleaned)).font(.system(size: 28, weight: .semibold)).monospacedDigit()
                         Text("Total moved to Trash or deleted, all time.").font(.caption).foregroundStyle(.secondary)
                     }
