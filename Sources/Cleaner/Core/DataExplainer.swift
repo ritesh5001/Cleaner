@@ -98,7 +98,7 @@ enum DataExplainer {
         case "Application":
             return .init(what: "The \(app) application itself.", usedFor: "Running \(app).",
                          ifDeleted: "\(app) is removed. Use Uninstall to also remove its data.", verdict: "review")
-        case "Cache", "Hidden cache":
+        case "Cache", "Hidden cache", "Cache inside app data":
             return .init(what: "Temporary copies of things \(app) downloaded or computed\(kind == "Hidden cache" ? ", kept in macOS's private per-app cache folder" : "").",
                          usedFor: "Making \(app) start and load faster.",
                          ifDeleted: "Safe — \(app) rebuilds what it needs. It may be a little slower the first time." + leftoverNote,

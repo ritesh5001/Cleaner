@@ -9,6 +9,12 @@ enum Entry {
         if args.contains("--dupes") { CLI.dupes(); exit(0) }
         if args.contains("--health") { CLI.health(); exit(0) }
         if args.contains("--apps") { CLI.apps(); exit(0) }
+        if let i = args.firstIndex(of: "--appclean-selftest"), i + 1 < args.count {
+            CLI.appCleanSelfTest(URL(fileURLWithPath: args[i + 1])); exit(0)
+        }
+        if let i = args.firstIndex(of: "--clean-options"), i + 1 < args.count {
+            CLI.cleanOptions(args[i + 1]); exit(0)
+        }
         if let i = args.firstIndex(of: "--agent"), i + 1 < args.count {
             // Dry run: shows the plan the Cleanup Agent proposes. Never executes it.
             let request = args[i + 1]
@@ -156,6 +162,60 @@ enum CLI {
             print("  \(Fmt.bytes(g.total).padding(toLength: 10, withPad: " ", startingAt: 0)) \(g.owner.name.padding(toLength: 34, withPad: " ", startingAt: 0)) app \(Fmt.bytes(g.appSize ?? 0)), data \(Fmt.bytes(g.dataSize)) in \(g.items.count) places [\(g.kind.rawValue)]")
         }
         print("\nUnidentified: \(unknown.count) items, \(Fmt.bytes(unknown.reduce(0) { $0 + $1.total })) — e.g. \(unknown.sorted { $0.total > $1.total }.prefix(6).map { "\($0.owner.name) \(Fmt.bytes($0.total))" }.joined(separator: ", "))")
+    }
+
+    /// `Cleaner --appclean-selftest <scratch dir>`: exercises backup + delete on dummy files only.
+    static func appCleanSelfTest(_ dir: URL) {
+        let fm = FileManager.default
+        try? fm.removeItem(at: dir)
+        let data = dir.appendingPathComponent("FakeApp Support"), cache = dir.appendingPathComponent("FakeApp Cache")
+        let key = dir.appendingPathComponent("signing.pem")
+        try? fm.createDirectory(at: data, withIntermediateDirectories: true)
+        try? fm.createDirectory(at: cache, withIntermediateDirectories: true)
+        fm.createFile(atPath: data.appendingPathComponent("settings.json").path, contents: Data(#"{"theme":"dark"}"#.utf8))
+        fm.createFile(atPath: cache.appendingPathComponent("blob.bin").path, contents: Data(repeating: 7, count: 200_000))
+        fm.createFile(atPath: key.path, contents: Data("-----BEGIN KEY-----".utf8))
+        setenv("CLEANER_BACKUP_ROOT", dir.appendingPathComponent("backups").path, 1)
+
+        // 1. Back up, then delete permanently
+        let t1 = [AppCleanTarget(url: data, kind: "App data", size: 4096), AppCleanTarget(url: cache, kind: "Cache", size: 200_000),
+                  AppCleanTarget(url: key, kind: "Key", size: 20)]
+        let (r1, backup, bfail) = AppCleaner.run(t1, method: .archive, appName: "FakeApp") { _ in }
+        let zips = (try? fm.contentsOfDirectory(atPath: backup?.path ?? "")) ?? []
+        let unzipCheck = backup.map { b -> Bool in
+            let out = dir.appendingPathComponent("restore")
+            _ = Shell.run("/usr/bin/ditto", ["-x", "-k", b.appendingPathComponent("App data - FakeApp Support.zip").path, out.path])
+            return (try? String(contentsOfFile: out.appendingPathComponent("FakeApp Support/settings.json").path, encoding: .utf8)) == #"{"theme":"dark"}"#
+        } ?? false
+        print("Archive: removed \(r1.removed.count), failures \(r1.failures.map { "\($0.url.lastPathComponent): \($0.reason)" }), backup failures \(bfail)")
+        print("  zips: \(zips.sorted())  · restored content matches: \(unzipCheck)")
+        print("  originals gone: \(!fm.fileExists(atPath: data.path) && !fm.fileExists(atPath: cache.path)) · key file kept: \(fm.fileExists(atPath: key.path))")
+
+        // 2. Permanent delete
+        let extra = dir.appendingPathComponent("Old Logs")
+        try? fm.createDirectory(at: extra, withIntermediateDirectories: true)
+        fm.createFile(atPath: extra.appendingPathComponent("a.log").path, contents: Data("x".utf8))
+        let (r2, _, _) = AppCleaner.run([AppCleanTarget(url: extra, kind: "Logs", size: 1)], method: .permanent, appName: "FakeApp") { _ in }
+        print("Permanent: removed \(r2.removed.count), gone: \(!fm.fileExists(atPath: extra.path))")
+        let pass = r1.removed.count == 2 && unzipCheck && fm.fileExists(atPath: key.path) && r2.removed.count == 1
+            && zips.count == 2 && !fm.fileExists(atPath: data.path)
+        print(pass ? "SELFTEST PASS" : "SELFTEST FAIL")
+    }
+
+    /// `Cleaner --clean-options "<App Name>"`: sizes of each cleaning option for one app (read-only).
+    static func cleanOptions(_ name: String) {
+        let all = AppStorageModel.collect().0
+        var groups = all.filter { $0.owner.name.caseInsensitiveCompare(name) == .orderedSame }
+        if groups.isEmpty { groups = all.filter { $0.owner.name.localizedCaseInsensitiveContains(name) } }
+        guard var f = groups.first else { print("No app matching \(name)"); return }
+        f.appSize = f.appBundle.map { SizeIndex.shared.measure($0) }
+        for j in f.items.indices { let u = f.items[j].url; f.items[j].size = Paths.isDirectory(u) ? SizeIndex.shared.measure(u) : FileSizer.size(of: u) }
+        groups = [f]
+        print("\(f.owner.name): total \(Fmt.bytes(f.total)), running: \(!AppCleaner.running(f).isEmpty), last opened \(Fmt.date(f.lastUsed))")
+        for o in AppCleanOption.available(for: f) where o != .custom {
+            let t = o.targets(f)
+            print("  \(o.title.padding(toLength: 24, withPad: " ", startingAt: 0)) \(Fmt.bytes(t.reduce(0) { $0 + $1.size }).padding(toLength: 10, withPad: " ", startingAt: 0)) \(t.count) item(s): \(t.map(\.kind).joined(separator: ", "))")
+        }
     }
 
     /// `Cleaner --organize-preview <dir>`: read-only "by type" plan.

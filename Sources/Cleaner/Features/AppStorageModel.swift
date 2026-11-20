@@ -5,6 +5,10 @@ struct AppDataItem: Identifiable, Hashable {
     let kind: String
     let cleanable: Bool
     var size: Int64?
+    /// A cache folder found *inside* another listed item (counted in its parent's size).
+    var isNested = false
+
+    static let nestedKind = "Cache inside app data"
     var id: URL { url }
 }
 
@@ -13,9 +17,16 @@ struct AppFootprint: Identifiable {
     var appBundle: URL?
     var appSize: Int64?
     var items: [AppDataItem]
+    var lastUsed: Date? = nil
     var id: String { owner.key }
 
-    var dataSize: Int64 { items.reduce(0) { $0 + ($1.size ?? 0) } }
+    /// Installed but not opened for 3+ months.
+    var isUnused: Bool {
+        guard appBundle != nil, let d = lastUsed else { return false }
+        return d < Date().addingTimeInterval(-90 * 86_400)
+    }
+
+    var dataSize: Int64 { items.filter { !$0.isNested }.reduce(0) { $0 + ($1.size ?? 0) } }
     var cleanableSize: Int64 { items.filter(\.cleanable).reduce(0) { $0 + ($1.size ?? 0) } }
     var total: Int64 { (appSize ?? 0) + dataSize }
     var isMeasuring: Bool { (appBundle != nil && appSize == nil) || items.contains { $0.size == nil } }
@@ -39,10 +50,16 @@ struct AppFootprint: Identifiable {
 /// "Which app is using my storage?" — every app with its bundle plus all the data it keeps in Library.
 @MainActor
 final class AppStorageModel: ObservableObject {
-    @Published private(set) var footprints: [AppFootprint] = []
+    @Published var footprints: [AppFootprint] = []
     @Published private(set) var isScanning = false
     @Published private(set) var status = ""
     @Published var filter: AppFootprint.Kind = .all
+    @Published var sort: SortKey = .size
+
+    enum SortKey: String, CaseIterable, Identifiable {
+        case size = "Total Size", cleanable = "Cleanable Space", name = "Name", lastUsed = "Last Opened"
+        var id: String { rawValue }
+    }
     @Published var search = ""
     @Published var isIdentifying = false
     @Published var message: String?
@@ -64,9 +81,15 @@ final class AppStorageModel: ObservableObject {
     ]
 
     var visible: [AppFootprint] {
-        footprints.filter { f in
+        let list = footprints.filter { f in
             (filter == .all || f.kind == filter)
                 && (search.isEmpty || f.owner.name.localizedCaseInsensitiveContains(search))
+        }
+        switch sort {
+        case .size: return list
+        case .cleanable: return list.sorted { $0.cleanableSize > $1.cleanableSize }
+        case .name: return list.sorted { $0.owner.name.localizedStandardCompare($1.owner.name) == .orderedAscending }
+        case .lastUsed: return list.sorted { ($0.lastUsed ?? .distantFuture) < ($1.lastUsed ?? .distantFuture) }
         }
     }
 
@@ -138,6 +161,19 @@ final class AppStorageModel: ObservableObject {
                 add(AppDataItem(url: child, kind: loc.kind, cleanable: loc.cleanable && SafetyGuard.blockReason(for: child) == nil))
             }
         }
+        // Browser-engine caches hidden inside app data (VS Code's CachedExtensionVSIXs, Code Cache, GPUCache…)
+        let innerNames: Set<String> = ["Cache", "Code Cache", "GPUCache", "DawnCache", "DawnGraphiteCache", "DawnWebGPUCache",
+                                       "GraphiteDawnCache", "GrShaderCache", "ShaderCache", "CachedData", "CachedExtensionVSIXs",
+                                       "Crashpad", "logs"]
+        for key in Array(groups.keys) {
+            for item in groups[key]!.items where item.kind == "App data" && Paths.isDirectory(item.url) {
+                for inner in DeepFinder.nested(in: item.url, names: innerNames, maxDepth: 3)
+                where SafetyGuard.blockReason(for: inner) == nil {
+                    groups[key]!.items.append(AppDataItem(url: inner, kind: AppDataItem.nestedKind, cleanable: true, isNested: true))
+                }
+            }
+        }
+
         // Tool folders in home (~/.npm, ~/.vscode, ~/.claude…)
         for child in Paths.children(of: Paths.home) where child.lastPathComponent.hasPrefix(".")
             && Paths.isDirectory(child) && ![".Trash", ".ssh", ".config"].contains(child.lastPathComponent) {
@@ -150,11 +186,12 @@ final class AppStorageModel: ObservableObject {
             let key = app.bundleID?.lowercased() ?? app.url.path
             if groups[key] == nil {
                 groups[key] = AppFootprint(owner: AppOwner(key: key, name: app.name, bundleURL: app.url, symbol: nil, source: .bundleID),
-                                           appBundle: app.url, appSize: nil, items: [])
+                                           appBundle: app.url, appSize: nil, items: [], lastUsed: app.lastUsed)
             } else {
                 // The app bundle is proof of ownership — show it as certain, not "likely".
                 groups[key]!.appBundle = app.url
                 groups[key]!.owner = AppOwner(key: key, name: app.name, bundleURL: app.url, symbol: nil, source: .bundleID)
+                groups[key]!.lastUsed = app.lastUsed
             }
         }
         return (Array(groups.values), apps)
@@ -187,6 +224,7 @@ final class AppStorageModel: ObservableObject {
             if let b = f.appBundle {
                 groups[f.id, default: AppFootprint(owner: f.owner, appBundle: b, appSize: f.appSize, items: [])].appBundle = b
                 groups[f.id]?.appSize = f.appSize
+                groups[f.id]?.lastUsed = f.lastUsed
             }
             for item in f.items {
                 let owner = AppOwnerResolver.shared.owner(for: item.url) ?? f.owner

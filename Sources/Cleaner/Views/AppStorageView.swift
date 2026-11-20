@@ -11,6 +11,12 @@ struct AppStorageView: View {
     @Local private var pendingTrash: AppDataItem?
     @Local private var explaining: String?
     @Local private var explainRevision = 0
+    @Local private var cleanRequest: AppCleanRequest?
+    @Local private var customSel: [String: Set<URL>] = [:]
+
+    private func openClean(_ f: AppFootprint, _ option: AppCleanOption) {
+        cleanRequest = AppCleanRequest(scope: .app(f, option, custom: customSel[f.id] ?? []))
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -51,13 +57,8 @@ struct AppStorageView: View {
         }
         .onAppear { if model.footprints.isEmpty && !model.isScanning { model.scan() } }
         .sheet(item: $query) { q in AIResponseSheet(query: q, ai: ai) }
-        .confirmationDialog("Clean \(pendingClean?.owner.name ?? "")'s caches?",
-                            isPresented: Binding(get: { pendingClean != nil }, set: { if !$0 { pendingClean = nil } })) {
-            Button("Move \(Fmt.bytes(pendingClean?.cleanableSize ?? 0)) to Trash", role: .destructive) {
-                if let f = pendingClean { clean(f) }
-            }
-        } message: {
-            Text("Only caches, logs and web data are removed — the app and your documents/settings stay. Quit the app first for best results.")
+        .sheet(item: $cleanRequest) { r in
+            AppCleanSheet(request: r, model: model) { state.uninstaller.reload() }
         }
         .confirmationDialog("Move “\(pendingTrash?.url.lastPathComponent ?? "")” to the Trash?",
                             isPresented: Binding(get: { pendingTrash != nil }, set: { if !$0 { pendingTrash = nil } })) {
@@ -107,9 +108,31 @@ struct AppStorageView: View {
                     Text("\(k.rawValue) (\(k == .all ? model.footprints.count : model.footprints.filter { $0.kind == k }.count))").tag(k)
                 }
             }
-            .frame(width: 260)
+            .frame(width: 230)
+            Picker("Sort", selection: $model.sort) {
+                ForEach(AppStorageModel.SortKey.allCases) { Text($0.rawValue).tag($0) }
+            }
+            .frame(width: 200)
             Spacer()
-            TextField("Search apps", text: $model.search).textFieldStyle(.roundedBorder).frame(width: 220)
+            GlassGroup {
+                HStack(spacing: 8) {
+                    let caches = model.allSafeCaches.flatMap(\.1).reduce(Int64(0)) { $0 + $1.size }
+                    let leftovers = model.allLeftovers.flatMap(\.1).reduce(Int64(0)) { $0 + $1.size }
+                    Button { cleanRequest = AppCleanRequest(scope: .allSafeCaches) } label: {
+                        Label("Clean All Safe Caches · \(Fmt.bytes(caches))", systemImage: "leaf")
+                    }
+                    .glassButton(prominent: true)
+                    .disabled(caches == 0 || model.isScanning)
+                    .help("Caches, logs and web caches of every app that isn't running")
+                    Button { cleanRequest = AppCleanRequest(scope: .allLeftovers) } label: {
+                        Label("Remove All Leftovers · \(Fmt.bytes(leftovers))", systemImage: "puzzlepiece.extension")
+                    }
+                    .glassButton()
+                    .disabled(leftovers == 0 || model.isScanning)
+                    .help("Everything left behind by apps you've uninstalled")
+                }
+            }
+            TextField("Search apps", text: $model.search).textFieldStyle(.roundedBorder).frame(width: 160)
         }
     }
 
@@ -137,6 +160,15 @@ struct AppStorageView: View {
                 HStack(spacing: 6) {
                     Text(f.owner.name).font(.body.weight(.medium)).lineLimit(1)
                     badge(for: f)
+                    if !AppCleaner.running(f).isEmpty {
+                        Label("Running", systemImage: "circle.fill").labelStyle(.titleAndIcon)
+                            .font(.caption2.weight(.semibold)).foregroundStyle(.green)
+                            .imageScale(.small)
+                    }
+                    if f.isUnused, let d = f.lastUsed {
+                        Text("Unused since \(Fmt.date(d))").font(.caption2.weight(.semibold)).foregroundStyle(.orange)
+                            .padding(.horizontal, 6).padding(.vertical, 1).background(Color.orange.opacity(0.14), in: Capsule())
+                    }
                 }
                 HStack(spacing: 10) {
                     if f.appBundle != nil { Text("App \(f.appSize.map(Fmt.bytes) ?? "…")") }
@@ -163,6 +195,7 @@ struct AppStorageView: View {
             .frame(width: 160, height: 8)
             if f.isMeasuring { ProgressView().controlSize(.mini) }
             Text(Fmt.bytes(f.total)).font(.body.weight(.semibold)).monospacedDigit().frame(width: 84, alignment: .trailing)
+            cleanMenu(f)
         }
         .padding(.vertical, 3)
         .contextMenu { actions(f) }
@@ -188,6 +221,35 @@ struct AppStorageView: View {
         }
     }
 
+    private func cleanMenu(_ f: AppFootprint) -> some View {
+        Menu {
+            ForEach(AppCleanOption.available(for: f).filter { $0 != .custom }) { o in
+                let size = o.targets(f).reduce(Int64(0)) { $0 + $1.size }
+                Button { openClean(f, o) } label: {
+                    Label("\(o.title) — \(Fmt.bytes(size))", systemImage: o.symbol)
+                }
+            }
+            Divider()
+            Button { expanded.insert(f.id) } label: { Label("Choose Items…", systemImage: "checklist") }
+        } label: {
+            Label("Clean", systemImage: "sparkles")
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .padding(.horizontal, 10).padding(.vertical, 5)
+        .glassCapsule(tint: .accentColor)
+        .help("Safe clean, reset, uninstall and more")
+    }
+
+    private func customBinding(_ f: AppFootprint, _ url: URL) -> Binding<Bool> {
+        Binding(get: { customSel[f.id]?.contains(url) ?? false },
+                set: { on in
+                    var set = customSel[f.id] ?? []
+                    if on { set.insert(url) } else { set.remove(url) }
+                    customSel[f.id] = set
+                })
+    }
+
     @ViewBuilder
     private func breakdown(_ f: AppFootprint) -> some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -200,18 +262,27 @@ struct AppStorageView: View {
             GlassGroup {
                 HStack(spacing: 8) {
                     if f.cleanableSize > 0 {
-                        Button("Clean Caches (\(Fmt.bytes(f.cleanableSize)))") { pendingClean = f }
+                        Button("Safe Clean (\(Fmt.bytes(f.cleanableSize)))") { openClean(f, .safe) }
                             .glassButton(prominent: true)
                     }
+                    let picked = customSel[f.id]?.count ?? 0
+                    if picked > 0 {
+                        Button("Delete Selected (\(picked))") { openClean(f, .custom) }
+                            .glassButton(prominent: true)
+                            .tint(.red)
+                    }
+                    Menu("More Options") {
+                        ForEach(AppCleanOption.available(for: f).filter { $0 != .safe && $0 != .custom }) { o in
+                            Button { openClean(f, o) } label: { Label(o.title, systemImage: o.symbol) }
+                        }
+                    }
+                    .fixedSize()
                     Button {
                         explain(f)
                     } label: {
                         Label(explaining == f.id ? "Explaining…" : "Explain Each Folder with AI", systemImage: "sparkles")
                     }
                     .disabled(explaining != nil || !ai.isReady)
-                    if f.appBundle != nil {
-                        Button("Uninstall…") { uninstall(f) }
-                    }
                     Button { ask(f) } label: { Label("Ask AI", systemImage: "bubble.left.and.text.bubble.right") }
                     Spacer()
                 }
@@ -227,6 +298,9 @@ struct AppStorageView: View {
         let e = DataExplainer.explanation(for: url, kind: kind, owner: footprint.owner)
         return VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
+                Toggle("", isOn: customBinding(footprint, url)).toggleStyle(.checkbox).labelsHidden()
+                    .disabled(SafetyGuard.blockReason(for: url) != nil)
+                    .help("Select for “Delete Selected”")
                 FileIcon(url: url, size: 18)
                 Text(kind).font(.caption.weight(.semibold))
                     .padding(.horizontal, 8).padding(.vertical, 2)
@@ -271,7 +345,10 @@ struct AppStorageView: View {
 
     @ViewBuilder
     private func actions(_ f: AppFootprint) -> some View {
-        if f.cleanableSize > 0 { Button("Clean Caches…") { pendingClean = f } }
+        ForEach(AppCleanOption.available(for: f).filter { $0 != .custom }) { o in
+            Button("\(o.title)…") { openClean(f, o) }
+        }
+        Divider()
         if f.appBundle != nil {
             Button("Show App in Finder") { f.appBundle?.revealInFinder() }
             Button("Uninstall…") { uninstall(f) }
