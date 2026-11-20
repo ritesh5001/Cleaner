@@ -33,6 +33,15 @@ enum Keychain {
         return String(data: data, encoding: .utf8)
     }
 
+    /// Checks for a stored key without reading the secret (never triggers a Keychain prompt).
+    static func exists(account: String) -> Bool {
+        var query = baseQuery(account)
+        query[kSecReturnAttributes as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        var out: AnyObject?
+        return SecItemCopyMatching(query as CFDictionary, &out) == errSecSuccess
+    }
+
     static func delete(account: String) {
         SecItemDelete(baseQuery(account) as CFDictionary)
     }

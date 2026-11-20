@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum SidebarItem: String, CaseIterable, Identifiable, Hashable {
-    case dashboard, smartScan, explorer, appStorage, largeFiles, duplicates, organizer, uninstaller, maintenance, assistant, settings
+    case dashboard, smartScan, explorer, appStorage, largeFiles, duplicates, organizer, uninstaller, maintenance, agent, assistant, settings
 
     var id: String { rawValue }
 
@@ -16,6 +16,7 @@ enum SidebarItem: String, CaseIterable, Identifiable, Hashable {
         case .organizer: "Organizer"
         case .uninstaller: "Uninstaller"
         case .maintenance: "Memory & Maintenance"
+        case .agent: "Cleanup Agent"
         case .assistant: "AI Assistant"
         case .settings: "Settings"
         }
@@ -32,6 +33,7 @@ enum SidebarItem: String, CaseIterable, Identifiable, Hashable {
         case .organizer: "folder.badge.gearshape"
         case .uninstaller: "xmark.app"
         case .maintenance: "memorychip"
+        case .agent: "wand.and.sparkles"
         case .assistant: "bubble.left.and.text.bubble.right"
         case .settings: "gearshape"
         }
@@ -54,6 +56,7 @@ final class AppState: ObservableObject {
     let uninstaller = UninstallerModel()
     let maintenance = MaintenanceModel()
     let assistant = AssistantModel()
+    let agent = AgentModel()
 
     private var timer: Timer?
 

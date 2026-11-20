@@ -19,6 +19,8 @@ swift run -c release Cleaner --dupes    # read-only: duplicate files report
 swift run -c release Cleaner --explore ~ # read-only: folder sizes like Storage Explorer
 swift run -c release Cleaner --organize-preview ~/Downloads   # read-only organizer plan
 swift run -c release Cleaner --ask "What is ~/Library/Caches?" # test the Claude-subscription bridge
+swift run -c release Cleaner --agent "clean browser caches"     # DRY RUN of the Cleanup Agent's plan
+swift run -c release Cleaner --apps                             # storage by app (read-only)
 ```
 
 ### First launch

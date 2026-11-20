@@ -9,6 +9,8 @@ struct AppStorageView: View {
     @Local private var query: AIQuery?
     @Local private var pendingClean: AppFootprint?
     @Local private var pendingTrash: AppDataItem?
+    @Local private var explaining: String?
+    @Local private var explainRevision = 0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -188,44 +190,83 @@ struct AppStorageView: View {
 
     @ViewBuilder
     private func breakdown(_ f: AppFootprint) -> some View {
-        if let b = f.appBundle {
-            itemRow(url: b, kind: "Application", size: f.appSize, cleanable: false, isApp: true, footprint: f)
-        }
-        ForEach(f.items) { i in
-            itemRow(url: i.url, kind: i.kind, size: i.size, cleanable: i.cleanable, isApp: false, footprint: f)
-        }
-        HStack(spacing: 8) {
-            if f.cleanableSize > 0 {
-                Button("Clean Caches (\(Fmt.bytes(f.cleanableSize)))") { pendingClean = f }
+        VStack(alignment: .leading, spacing: 8) {
+            if let b = f.appBundle {
+                itemRow(url: b, kind: "Application", size: f.appSize, cleanable: false, isApp: true, footprint: f)
             }
-            if f.appBundle != nil {
-                Button("Uninstall…") { uninstall(f) }
+            ForEach(f.items) { i in
+                itemRow(url: i.url, kind: i.kind, size: i.size, cleanable: i.cleanable, isApp: false, footprint: f)
             }
-            Button { ask(f) } label: { Label("Ask AI", systemImage: "sparkles") }
-            Spacer()
+            GlassGroup {
+                HStack(spacing: 8) {
+                    if f.cleanableSize > 0 {
+                        Button("Clean Caches (\(Fmt.bytes(f.cleanableSize)))") { pendingClean = f }
+                            .glassButton(prominent: true)
+                    }
+                    Button {
+                        explain(f)
+                    } label: {
+                        Label(explaining == f.id ? "Explaining…" : "Explain Each Folder with AI", systemImage: "sparkles")
+                    }
+                    .disabled(explaining != nil || !ai.isReady)
+                    if f.appBundle != nil {
+                        Button("Uninstall…") { uninstall(f) }
+                    }
+                    Button { ask(f) } label: { Label("Ask AI", systemImage: "bubble.left.and.text.bubble.right") }
+                    Spacer()
+                }
+                .glassButton()
+            }
+            .controlSize(.small)
         }
-        .controlSize(.small)
-        .padding(.vertical, 4)
+        .padding(.vertical, 6)
     }
 
     private func itemRow(url: URL, kind: String, size: Int64?, cleanable: Bool, isApp: Bool, footprint: AppFootprint) -> some View {
-        HStack(spacing: 8) {
-            FileIcon(url: url, size: 16)
-            Text(kind).font(.caption.weight(.medium))
-                .padding(.horizontal, 6).padding(.vertical, 1)
-                .background((cleanable ? Color.green : Color.secondary).opacity(0.14), in: Capsule())
-                .frame(width: 130, alignment: .leading)
-            Text(url.displayPath).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
-            Spacer()
-            Text(size.map(Fmt.bytes) ?? "…").font(.caption).monospacedDigit()
-            Button { url.revealInFinder() } label: { Image(systemName: "magnifyingglass") }
-                .buttonStyle(.borderless).help("Reveal in Finder")
-            if !isApp {
-                Button { pendingTrash = footprint.items.first { $0.url == url } } label: { Image(systemName: "trash") }
-                    .buttonStyle(.borderless).help("Move to Trash")
-                    .disabled(SafetyGuard.blockReason(for: url) != nil)
+        let _ = explainRevision
+        let e = DataExplainer.explanation(for: url, kind: kind, owner: footprint.owner)
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                FileIcon(url: url, size: 18)
+                Text(kind).font(.caption.weight(.semibold))
+                    .padding(.horizontal, 8).padding(.vertical, 2)
+                    .glassCapsule(tint: cleanable ? .green : nil)
+                Text(url.displayPath).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                    .help(url.path)
+                Spacer()
+                Label(e.verdictLabel, systemImage: e.safety == .safe ? "checkmark.circle.fill" : e.safety == .caution ? "lock.fill" : "exclamationmark.circle.fill")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(e.safety.color)
+                if e.fromAI { Image(systemName: "sparkles").font(.caption2).foregroundStyle(.purple).help("Explained by AI") }
+                Text(size.map(Fmt.bytes) ?? "…").font(.callout.weight(.semibold)).monospacedDigit().frame(width: 76, alignment: .trailing)
+                Button { url.revealInFinder() } label: { Image(systemName: "magnifyingglass") }
+                    .buttonStyle(.borderless).help("Reveal in Finder")
+                if !isApp {
+                    Button { pendingTrash = footprint.items.first { $0.url == url } } label: { Image(systemName: "trash") }
+                        .buttonStyle(.borderless).help("Move to Trash")
+                        .disabled(SafetyGuard.blockReason(for: url) != nil)
+                }
             }
+            Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 3) {
+                GridRow {
+                    Text("What it is").foregroundStyle(.secondary)
+                    Text(e.what)
+                }
+                GridRow {
+                    Text("Used for").foregroundStyle(.secondary)
+                    Text(e.usedFor)
+                }
+                GridRow {
+                    Text("If deleted").foregroundStyle(.secondary)
+                    Text(e.ifDeleted).foregroundStyle(e.safety == .safe ? Color.primary : e.safety.color)
+                }
+            }
+            .font(.caption)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.leading, 26)
         }
+        .padding(12)
+        .glassCard(cornerRadius: 16, tint: e.safety == .caution ? .red : nil)
     }
 
     @ViewBuilder
@@ -239,6 +280,23 @@ struct AppStorageView: View {
     }
 
     // MARK: Actions
+
+    private func explain(_ f: AppFootprint) {
+        explaining = f.id
+        var items: [(url: URL, kind: String, size: Int64?, owner: AppOwner?)] = []
+        if let b = f.appBundle { items.append((b, "Application", f.appSize, f.owner)) }
+        items += f.items.map { ($0.url, $0.kind, $0.size, Optional(f.owner)) }
+        Task {
+            do {
+                let n = try await DataExplainer.explainWithAI(items)
+                model.message = "\(ai.activeProvider.shortName) explained \(n) folder(s) of \(f.owner.name)."
+            } catch {
+                model.message = error.localizedDescription
+            }
+            explainRevision += 1
+            explaining = nil
+        }
+    }
 
     private func ask(_ f: AppFootprint) {
         var p = "Explain what \(f.owner.name) is and why it uses this much space on my Mac, and what I can safely clean.\n\n"

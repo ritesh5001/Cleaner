@@ -17,7 +17,10 @@ struct RootView: View {
                 }
                 Section("Organize") { row(.organizer) }
                 Section("Speed") { row(.maintenance) }
-                Section("AI") { row(.assistant) }
+                Section("AI") {
+                    row(.agent)
+                    row(.assistant)
+                }
                 Section { row(.settings) }
             }
             .navigationSplitViewColumnWidth(min: 210, ideal: 230)
@@ -45,6 +48,7 @@ struct RootView: View {
         case .organizer: OrganizerView(model: state.organizer)
         case .uninstaller: UninstallerView(model: state.uninstaller)
         case .maintenance: MaintenanceView(model: state.maintenance)
+        case .agent: AgentView(model: state.agent)
         case .assistant: AssistantView(model: state.assistant)
         case .settings: ScrollView { SettingsView().frame(maxWidth: 760).padding() }
         }

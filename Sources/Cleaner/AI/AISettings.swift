@@ -69,6 +69,7 @@ final class AISettings: ObservableObject {
         let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return false }
         let ok = Keychain.save(trimmed, account: k.rawValue)
+        if ok { UserDefaults.standard.set(String(trimmed.suffix(4)), forKey: "ai.keyHint.\(k.rawValue)") }
         refreshKeys()
         if ok, !isConfigured(activeProvider) { activeProvider = k }
         return ok
@@ -82,10 +83,10 @@ final class AISettings: ObservableObject {
 
     func refreshKeys() {
         var m: [AIProviderKind: String] = [:]
-        for k in AIProviderKind.allCases where k.usesAPIKey {
-            if let key = Keychain.read(account: k.rawValue), !key.isEmpty {
-                m[k] = "••••••••" + key.suffix(4)
-            }
+        // Only check that a key exists — reading the secret is deferred until an AI request,
+        // so launching the app never triggers a Keychain prompt.
+        for k in AIProviderKind.allCases where k.usesAPIKey && Keychain.exists(account: k.rawValue) {
+            m[k] = "••••••••" + (UserDefaults.standard.string(forKey: "ai.keyHint.\(k.rawValue)") ?? "")
         }
         maskedKeys = m
     }

@@ -80,6 +80,15 @@ final class JunkScanner: ObservableObject {
         }
     }
 
+    /// Drops items removed elsewhere (e.g. by the Cleanup Agent) from the results.
+    func forget(_ urls: Set<URL>) {
+        guard !urls.isEmpty else { return }
+        results = results
+            .map { var r = $0; r.items.removeAll { urls.contains($0.url) }; return r }
+            .filter { !$0.isEmpty }
+        selected.subtract(urls)
+    }
+
     private func apply(_ report: CleanReport) {
         let removed = Set(report.removed)
         results = results

@@ -28,6 +28,7 @@ struct DashboardView: View {
 
                 Text("What do you want to do?").font(.headline)
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 12)], spacing: 12) {
+                    ActionTile(item: .agent, text: "Tell the AI what to delete in plain words — it plans, you approve.")
                     ActionTile(item: .smartScan, text: "Find caches, logs, developer junk, old installers and leftovers.")
                     ActionTile(item: .largeFiles, text: "Find big and forgotten files across your home folder.")
                     ActionTile(item: .duplicates, text: "Find identical files and keep just one copy.")

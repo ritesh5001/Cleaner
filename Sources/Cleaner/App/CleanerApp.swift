@@ -9,6 +9,49 @@ enum Entry {
         if args.contains("--dupes") { CLI.dupes(); exit(0) }
         if args.contains("--health") { CLI.health(); exit(0) }
         if args.contains("--apps") { CLI.apps(); exit(0) }
+        if let i = args.firstIndex(of: "--agent"), i + 1 < args.count {
+            // Dry run: shows the plan the Cleanup Agent proposes. Never executes it.
+            let request = args[i + 1]
+            Task { @MainActor in
+                let state = AppState()
+                state.agent.input = request
+                state.agent.send(state: state)
+                while state.agent.isWorking { try? await Task.sleep(for: .milliseconds(500)) }
+                for t in state.agent.turns {
+                    print("\(t.role == .user ? "YOU" : "AGENT"): \(t.text)")
+                    if let p = t.plan {
+                        for a in p.actions {
+                            print("  [\(a.selected ? "x" : " ")] \(Fmt.bytes(a.candidate.size).padding(toLength: 9, withPad: " ", startingAt: 0)) \(a.risk.label.padding(toLength: 8, withPad: " ", startingAt: 0)) \(a.candidate.url.displayPath) — \(a.reason)")
+                        }
+                        if !p.tasks.isEmpty { print("  tasks: \(p.tasks.joined(separator: ", "))") }
+                        print("  → would clean \(Fmt.bytes(p.selectedSize)) (DRY RUN — nothing executed)")
+                    }
+                }
+                exit(0)
+            }
+            dispatchMain()
+        }
+        if args.contains("--explain-test") {
+            Task { @MainActor in
+                AppOwnerResolver.shared.reload()
+                let paths = ["~/Library/Application Support/Code", "~/.vscode", "~/Library/HTTPStorages/com.microsoft.VSCode",
+                             "~/Library/Application Support/Claude/vm_bundles"]
+                let items = paths.map(Paths.expand).map { u -> (url: URL, kind: String, size: Int64?, owner: AppOwner?) in
+                    (u, u.path.contains("/.vscode") ? "Tool folder" : u.path.contains("HTTPStorages") ? "Web storage" : "App data",
+                     SizeIndex.shared.measure(u), AppOwnerResolver.shared.owner(for: u))
+                }
+                do {
+                    let n = try await DataExplainer.explainWithAI(items)
+                    print("AI explained \(n):")
+                    for i in items {
+                        let e = DataExplainer.explanation(for: i.url, kind: i.kind, owner: i.owner)
+                        print("\n\(i.url.displayPath) [\(e.verdictLabel)\(e.fromAI ? ", AI" : "")]\n  What: \(e.what)\n  Used for: \(e.usedFor)\n  If deleted: \(e.ifDeleted)")
+                    }
+                } catch { print("ERROR:", error.localizedDescription) }
+                exit(0)
+            }
+            dispatchMain()
+        }
         if args.contains("--identify") {
             // Live test of "Identify with AI" on cache/tool folders Cleaner couldn't attribute.
             Task { @MainActor in
